@@ -32,6 +32,9 @@ target/
 .env.*
 !.env.example
 
+# Initial data output
+/init-data/
+
 # Operating system files
 .DS_Store
 Thumbs.db
