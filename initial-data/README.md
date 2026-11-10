@@ -6,10 +6,17 @@ escalations, and ticket event timelines.
 
 ```bash
 cd initial-data
-python -m initial_data --output generated
+uv run --no-project python generate.py --output ../data/generated
 ```
 
-The generated data intentionally includes:
+From the repository root, the recommended command is:
+
+```bash
+pnpm data:generate
+```
+
+CSV files are written to `data/generated/`, which is ignored as generated
+output. The generated data intentionally includes:
 
 - open, in-progress, pending, resolved, and closed tickets;
 - SLA breaches and risk levels;

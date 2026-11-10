@@ -33,7 +33,7 @@ target/
 !.env.example
 
 # Initial data output
-/init-data/
+/data/generated/
 
 # Operating system files
 .DS_Store

@@ -1,0 +1,18 @@
+{
+  "name": "sla-analysis",
+  "private": true,
+  "packageManager": "pnpm@12.15.0",
+  "scripts": {
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down",
+    "db:logs": "docker compose logs -f postgres",
+    "db:reset": "docker compose down -v && docker compose up -d --wait",
+    "data:generate": "uv run --no-project python initial-data/generate.py --output data/generated",
+    "data:drop": "cat scripts/drop-data.sql | docker compose exec -T postgres psql -U postgres -d sla",
+    "data:load": "pnpm db:up && pnpm data:generate && pnpm app:import",
+    "app:run": "cd sla && mvn spring-boot:run",
+    "app:import": "cd sla && mvn spring-boot:run -Dspring-boot.run.arguments=--seed-data-dir=../data/generated",
+    "test": "cd sla && mvn test",
+    "build": "cd sla && mvn package"
+  }
+}

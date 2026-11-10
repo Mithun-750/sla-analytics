@@ -310,7 +310,7 @@ def generate(output: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=Path("generated"))
+    parser.add_argument("--output", type=Path, default=Path("../data/generated"))
     args = parser.parse_args()
     generate(args.output)
 
