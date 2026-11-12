@@ -3,6 +3,7 @@
 set -e
 
 pnpm db:up
+pnpm db:schema
 pnpm db:outbox
 
 backend_pid=

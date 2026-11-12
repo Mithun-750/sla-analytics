@@ -5,9 +5,17 @@ from datetime import timezone
 from pathlib import Path
 
 import boto3
+import pandas as pd
 import psycopg
 from dotenv import load_dotenv
 from psycopg.rows import dict_row
+
+from sync import (
+    clean_table,
+    dataframe_to_parquet,
+    get_table_metadata,
+    normalize_value,
+)
 
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
@@ -76,6 +84,15 @@ def event_key(event):
     )
 
 
+def dataframe_key(event, dataset):
+    occurred_at = event["occurred_at"].astimezone(timezone.utc)
+    return (
+        f"{dataset}/{event['table_name']}/"
+        f"ingestion_date={occurred_at:%Y-%m-%d}/"
+        f"event_id={event['id']}/{event['table_name']}.parquet"
+    )
+
+
 def upload_event(s3, event):
     body = json.dumps(
         {
@@ -93,6 +110,48 @@ def upload_event(s3, event):
         Body=body,
         ContentType="application/json",
     )
+
+
+def upload_dataframe(s3, event, dataset, dataframe):
+    s3.put_object(
+        Bucket=S3_BUCKET,
+        Key=dataframe_key(event, dataset),
+        Body=dataframe_to_parquet(dataframe),
+        ContentType="application/octet-stream",
+    )
+
+
+def event_dataframe(event, columns):
+    row = event["row_data"]
+    return pd.DataFrame(
+        [{column: normalize_value(row.get(column)) for column in columns}],
+        columns=columns,
+    )
+
+
+def add_event_metadata(dataframe, event):
+    result = dataframe.copy()
+    result["_event_id"] = event["id"]
+    result["_operation"] = event["operation"]
+    result["_occurred_at"] = event["occurred_at"]
+    return result
+
+
+def process_event(s3, connection, event):
+    columns, required_columns, primary_keys = get_table_metadata(
+        connection, event["table_name"]
+    )
+    raw = add_event_metadata(event_dataframe(event, columns), event)
+    clean, rejected = clean_table(raw, required_columns, primary_keys)
+
+    upload_event(s3, event)
+    upload_dataframe(s3, event, "raw", raw)
+    if clean.empty:
+        upload_dataframe(s3, event, "rejected", rejected)
+    else:
+        upload_dataframe(s3, event, "clean", clean)
+    if not rejected.empty:
+        upload_dataframe(s3, event, "rejected", rejected)
 
 
 def mark_processed(connection, event_id):
@@ -137,7 +196,7 @@ def run():
 
             for event in events:
                 try:
-                    upload_event(s3, event)
+                    process_event(s3, connection, event)
                     mark_processed(connection, event["id"])
                 except Exception as error:
                     mark_failed(connection, event["id"], error)

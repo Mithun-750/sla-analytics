@@ -7,7 +7,10 @@ authors = [
     { name = "Mithun", email = "116871732+Mithun-750@users.noreply.github.com" }
 ]
 requires-python = ">=3.15"
-dependencies = []
+dependencies = [
+    "psycopg[binary]>=3.3.8",
+    "python-dotenv>=1.2.4",
+]
 
 [project.scripts]
 initial-data = "initial_data:main"

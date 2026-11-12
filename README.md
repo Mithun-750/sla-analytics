@@ -11,7 +11,8 @@ pnpm db:up
 pnpm data:load
 ```
 
-The application starts with the generated data in `data/generated/`.
+The Python loader creates the schema and loads the generated data before the
+application starts.
 
 ## Outbox
 
@@ -42,9 +43,10 @@ automatically by `pnpm start`.
 ```bash
 pnpm app:run        # Start the application
 pnpm data:generate  # Generate CSV data
-pnpm data:load      # Generate and import data
+pnpm data:load      # Generate and load data with Python
 pnpm data:drop      # Remove rows and keep the schema
 pnpm db:reset       # Delete and recreate PostgreSQL
+pnpm db:schema      # Create or validate the application schema
 pnpm db:outbox      # Install or refresh PostgreSQL outbox triggers
 pnpm db:outbox:backfill # Queue existing rows for one-time publication
 pnpm start          # Start the backend and outbox worker together
@@ -56,3 +58,7 @@ pnpm etl:run        # Run the legacy full-table export
 
 The outbox worker publishes to S3. Configure the database, AWS, and worker
 settings in the root `.env` file.
+
+The outbox worker writes each incremental change under `events/`, `raw/`,
+`clean/`, and `rejected/`. Run `pnpm etl:run` for full-table snapshots and
+reconciliation.

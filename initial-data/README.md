@@ -25,4 +25,11 @@ output. The generated data intentionally includes:
 - open, claimed, and resolved escalations;
 - event histories for ticket state transitions.
 
-CSV files are written to `generated/`, which is ignored as generated output.
+Load the generated CSV files into PostgreSQL with:
+
+```bash
+uv run --project initial-data python initial-data/load.py
+```
+
+The loader applies `scripts/schema.sql` before inserting rows and keeps the
+entire load in one transaction.
