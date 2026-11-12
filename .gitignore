@@ -17,6 +17,7 @@ target/
 .settings/
 
 # VS Code workspace state
+.vscode
 .vscode/*
 !.vscode/settings.json
 !.vscode/extensions.json
@@ -34,6 +35,7 @@ target/
 
 # Initial data output
 /data/generated/
+/etl/.venv/
 
 # Operating system files
 .DS_Store

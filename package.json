@@ -12,6 +12,8 @@
     "data:load": "pnpm db:up && pnpm data:generate && pnpm app:import",
     "app:run": "cd sla && mvn spring-boot:run",
     "app:import": "cd sla && mvn spring-boot:run -Dspring-boot.run.arguments=--seed-data-dir=../data/generated",
+    "etl:run": "uv run --project etl sla-etl",
+    "etl:sync": "uv sync --project etl",
     "test": "cd sla && mvn test",
     "build": "cd sla && mvn package"
   }

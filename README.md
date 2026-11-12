@@ -23,5 +23,9 @@ pnpm data:drop      # Remove rows and keep the schema
 pnpm db:reset       # Delete and recreate PostgreSQL
 pnpm test           # Run tests
 pnpm build          # Build the application
+pnpm etl:sync       # Install ETL dependencies
+pnpm etl:run        # Load PostgreSQL into Snowflake
 ```
 
+The ETL service requires Snowflake connection environment variables; see
+`etl/README.md`.
