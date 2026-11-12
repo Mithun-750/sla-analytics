@@ -33,3 +33,14 @@ uv run --project initial-data python initial-data/load.py
 
 The loader applies `scripts/schema.sql` before inserting rows and keeps the
 entire load in one transaction.
+
+Generate and load a fresh smaller batch with:
+
+```bash
+pnpm data:load-temp
+```
+
+This clears `data/temp/`, generates 6 users, 3 customers, 3 skills, and 30
+tickets, then loads them using the next ID range recorded in
+`data/temp-state.json`. Repeating the command creates another non-conflicting
+batch.

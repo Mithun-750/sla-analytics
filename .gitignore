@@ -40,6 +40,8 @@ target/
 
 # Initial data output
 /data/generated/
+/data/temp/
+/data/temp-state.json
 /etl/.venv/
 
 # Python build and cache output

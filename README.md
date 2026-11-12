@@ -44,6 +44,7 @@ automatically by `pnpm start`.
 pnpm app:run        # Start the application
 pnpm data:generate  # Generate CSV data
 pnpm data:load      # Generate and load data with Python
+pnpm data:load-temp # Generate and load a fresh smaller batch
 pnpm data:drop      # Remove rows and keep the schema
 pnpm db:reset       # Delete and recreate PostgreSQL
 pnpm db:schema      # Create or validate the application schema

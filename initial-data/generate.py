@@ -36,7 +36,7 @@ def write_csv(path: Path, rows: Iterable[dict[str, object]]) -> int:
     return len(materialized)
 
 
-def build_users() -> list[dict[str, object]]:
+def build_users(count: int = 12, id_offset: int = 0, batch: int = 0) -> list[dict[str, object]]:
     names = [
         ("ava.morgan", "SUPERVISOR", True, 12),
         ("liam.chen", "SUPERVISOR", True, 10),
@@ -53,18 +53,26 @@ def build_users() -> list[dict[str, object]]:
     ]
     return [
         {
-            "id": index,
-            "username": username,
+            "id": id_offset + index,
+            "username": f"{username}.b{batch}" if batch else username,
             "role": role,
             "is_available": str(available).lower(),
             "max_concurrent_tickets": capacity,
             "created_at": timestamp(START - timedelta(days=400 - index * 11)),
         }
-        for index, (username, role, available, capacity) in enumerate(names, 1)
+        for index, (username, role, available, capacity) in enumerate(names[:count], 1)
     ]
 
 
-def build_tickets(rng: random.Random, customers: int, skills: int) -> list[dict[str, object]]:
+def build_tickets(
+    rng: random.Random,
+    customers: int,
+    skills: int,
+    users: int,
+    count: int = 60,
+    id_offset: int = 0,
+    batch: int = 0,
+) -> list[dict[str, object]]:
     subjects = [
         "Production API latency is above SLA",
         "Customer cannot access billing portal",
@@ -76,7 +84,9 @@ def build_tickets(rng: random.Random, customers: int, skills: int) -> list[dict[
         "Intermittent payment timeout",
     ]
     rows = []
-    for ticket_id in range(1, 61):
+    agent_count = max(1, users - 3)
+    for local_id in range(1, count + 1):
+        ticket_id = id_offset + local_id
         created = START + timedelta(hours=ticket_id * 13 + rng.randint(0, 7))
         priority = rng.choices(PRIORITIES, weights=[18, 40, 30, 12])[0]
         urgency = rng.choices(URGENCIES, weights=[15, 40, 32, 13])[0]
@@ -99,10 +109,10 @@ def build_tickets(rng: random.Random, customers: int, skills: int) -> list[dict[
         rows.append(
             {
                 "id": ticket_id,
-                "ticket_number": f"SLA-{created.year}-{ticket_id:05d}",
-                "customer_id": (ticket_id % customers) + 1,
-                "assigned_agent_id": ((ticket_id * 3) % 9) + 4,
-                "required_skill_id": (ticket_id % skills) + 1,
+                "ticket_number": f"SLA-{created.year}-{ticket_id:05d}-B{batch}" if batch else f"SLA-{created.year}-{ticket_id:05d}",
+                "customer_id": id_offset + ((local_id - 1) % customers) + 1,
+                "assigned_agent_id": id_offset + ((local_id * 3) % agent_count) + 4,
+                "required_skill_id": id_offset + ((local_id - 1) % skills) + 1,
                 "sla_policy_key": f"{priority.lower()}-standard",
                 "sla_policy_version": "2026.1",
                 "calendar_config_version": "business-hours-v2",
@@ -139,9 +149,10 @@ def build_tickets(rng: random.Random, customers: int, skills: int) -> list[dict[
     return rows
 
 
-def build_events(tickets: list[dict[str, object]]) -> list[dict[str, object]]:
+def build_events(tickets: list[dict[str, object]], users: int, id_offset: int = 0) -> list[dict[str, object]]:
     rows = []
-    event_id = 0
+    event_id = id_offset * 1000
+    agent_count = max(1, users - 3)
     for ticket in tickets:
         ticket_id = int(ticket["id"])
         created = datetime.strptime(str(ticket["created_at"]), ISO).replace(tzinfo=timezone.utc)
@@ -158,7 +169,7 @@ def build_events(tickets: list[dict[str, object]]) -> list[dict[str, object]]:
                 {
                     "id": f"00000000-0000-4000-8000-{event_id:012d}",
                     "ticket_id": ticket_id,
-                    "actor_id": ((ticket_id + version) % 9) + 4,
+                    "actor_id": id_offset + ((ticket_id + version) % agent_count) + 4,
                     "actor_type": "SYSTEM" if event_type == "CREATED" else "USER",
                     "event_type": event_type,
                     "event_version": version,
@@ -173,9 +184,10 @@ def build_events(tickets: list[dict[str, object]]) -> list[dict[str, object]]:
     return rows
 
 
-def build_assignments(tickets: list[dict[str, object]]) -> list[dict[str, object]]:
+def build_assignments(tickets: list[dict[str, object]], users: int, id_offset: int = 0) -> list[dict[str, object]]:
     rows = []
-    assignment_id = 0
+    assignment_id = id_offset
+    agent_count = max(1, users - 3)
     for ticket in tickets:
         count = int(ticket["reassignment_count"]) + 1
         created = datetime.strptime(str(ticket["created_at"]), ISO).replace(tzinfo=timezone.utc)
@@ -187,8 +199,8 @@ def build_assignments(tickets: list[dict[str, object]]) -> list[dict[str, object
                 {
                     "id": assignment_id,
                     "ticket_id": ticket["id"],
-                    "agent_id": ((int(ticket["id"]) * 3 + attempt) % 9) + 4,
-                    "assigned_by": 1 if attempt else 3,
+                    "agent_id": id_offset + ((int(ticket["id"]) * 3 + attempt) % agent_count) + 4,
+                    "assigned_by": id_offset + (1 if attempt else 3),
                     "assignment_type": "REASSIGNMENT" if attempt else "ROUTED",
                     "routing_score": f"{0.61 + attempt * 0.08:.2f}",
                     "routing_factors": json.dumps({"skill_match": 0.9 - attempt * 0.1, "load": 0.4}),
@@ -202,9 +214,9 @@ def build_assignments(tickets: list[dict[str, object]]) -> list[dict[str, object
     return rows
 
 
-def build_pauses(tickets: list[dict[str, object]]) -> list[dict[str, object]]:
+def build_pauses(tickets: list[dict[str, object]], id_offset: int = 0) -> list[dict[str, object]]:
     rows = []
-    pause_id = 0
+    pause_id = id_offset
     for ticket in tickets:
         ticket_id = int(ticket["id"])
         if ticket_id % 6 not in (0, 1):
@@ -219,10 +231,10 @@ def build_pauses(tickets: list[dict[str, object]]) -> list[dict[str, object]]:
             {
                 "id": pause_id,
                 "ticket_id": ticket_id,
-                "initiated_by": ((ticket_id + 2) % 9) + 4,
+                "initiated_by": id_offset + ((ticket_id + 2) % 3) + 4,
                 "attempted_reason": "Waiting for customer logs",
                 "decision_status": "RESUMED" if resumed else ("APPROVED" if approved else "REJECTED"),
-                "approved_by": 1 if approved else "",
+                "approved_by": id_offset + 1 if approved else "",
                 "remarks": "Approved for customer-provided diagnostic information." if approved else "Insufficient evidence.",
                 "requested_at": timestamp(requested),
                 "paused_at": timestamp(paused),
@@ -233,9 +245,9 @@ def build_pauses(tickets: list[dict[str, object]]) -> list[dict[str, object]]:
     return rows
 
 
-def build_escalations(tickets: list[dict[str, object]]) -> list[dict[str, object]]:
+def build_escalations(tickets: list[dict[str, object]], id_offset: int = 0) -> list[dict[str, object]]:
     rows = []
-    escalation_id = 0
+    escalation_id = id_offset
     for ticket in tickets:
         ticket_id = int(ticket["id"])
         if ticket_id % 5 not in (0, 1):
@@ -248,8 +260,8 @@ def build_escalations(tickets: list[dict[str, object]]) -> list[dict[str, object
             {
                 "id": escalation_id,
                 "ticket_id": ticket_id,
-                "created_by": 1 if ticket_id % 2 else 3,
-                "owner_supervisor_id": 1 if claimed else "",
+                "created_by": id_offset + (1 if ticket_id % 2 else 3),
+                "owner_supervisor_id": id_offset + 1 if claimed else "",
                 "assigned_agent_id": ticket["assigned_agent_id"],
                 "reason": "SLA_BREACH" if ticket["sla_breached"] == "true" else "HIGH_RISK",
                 "description": "Synthetic escalation for supervisor workflow validation.",
@@ -263,18 +275,28 @@ def build_escalations(tickets: list[dict[str, object]]) -> list[dict[str, object
     return rows
 
 
-def generate(output: Path) -> None:
+def generate(
+    output: Path,
+    *,
+    user_count: int = 12,
+    customer_count: int = 6,
+    skill_count: int = 6,
+    ticket_count: int = 60,
+    id_offset: int = 0,
+    batch: int = 0,
+) -> None:
     rng = random.Random(SEED)
     output.mkdir(parents=True, exist_ok=True)
-    users = build_users()
-    skills = [{"id": i, "name": name} for i, name in enumerate(
+    users = build_users(user_count, id_offset, batch)
+    skills = [{"id": id_offset + i, "name": f"{name} Batch {batch}" if batch else name}
+              for i, name in enumerate(
         ["API", "Database", "Identity", "Payments", "Networking", "Reporting"], 1
-    )]
+    ) if i <= skill_count]
     customers = [
         {
-            "id": i,
-            "name": name,
-            "email": f"{name.lower().replace(' ', '.')}@example.test",
+            "id": id_offset + i,
+            "name": f"{name} Batch {batch}" if batch else name,
+            "email": f"{name.lower().replace(' ', '.')}+b{batch}@example.test" if batch else f"{name.lower().replace(' ', '.')}@example.test",
             "tier": tier,
             "created_at": timestamp(START - timedelta(days=500 - i * 17)),
         }
@@ -282,11 +304,13 @@ def generate(output: Path) -> None:
             [("Northwind Retail", "ENTERPRISE"), ("Contoso Health", "PREMIUM"),
              ("Fabrikam Logistics", "STANDARD"), ("Adventure Works", "PREMIUM"),
              ("Tailspin Toys", "STANDARD"), ("Blue Yonder", "ENTERPRISE")], 1
-        )
+        ) if i <= customer_count
     ]
-    tickets = build_tickets(rng, len(customers), len(skills))
+    tickets = build_tickets(
+        rng, len(customers), len(skills), len(users), ticket_count, id_offset, batch
+    )
     user_skills = [
-        {"user_id": user["id"], "skill_id": skill["id"], "proficiency_level": 3 + (user["id"] + skill["id"]) % 3}
+        {"user_id": user["id"], "skill_id": skill["id"], "proficiency_level": 3 + (int(user["id"]) + int(skill["id"])) % 3}
         for user in users[3:]
         for skill in skills
         if (int(user["id"]) + int(skill["id"])) % 2 == 0
@@ -297,10 +321,10 @@ def generate(output: Path) -> None:
         "skills.csv": skills,
         "user_skills.csv": user_skills,
         "tickets.csv": tickets,
-        "ticket_assignments.csv": build_assignments(tickets),
-        "ticket_pauses.csv": build_pauses(tickets),
-        "ticket_escalations.csv": build_escalations(tickets),
-        "ticket_events.csv": build_events(tickets),
+        "ticket_assignments.csv": build_assignments(tickets, len(users), id_offset),
+        "ticket_pauses.csv": build_pauses(tickets, id_offset),
+        "ticket_escalations.csv": build_escalations(tickets, id_offset),
+        "ticket_events.csv": build_events(tickets, len(users), id_offset),
     }
     counts = {name: write_csv(output / name, rows) for name, rows in tables.items()}
     print(f"Generated {sum(counts.values())} rows in {output}")
@@ -311,8 +335,22 @@ def generate(output: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=Path("../data/generated"))
+    parser.add_argument("--user-count", type=int, default=12)
+    parser.add_argument("--customer-count", type=int, default=6)
+    parser.add_argument("--skill-count", type=int, default=6)
+    parser.add_argument("--ticket-count", type=int, default=60)
+    parser.add_argument("--id-offset", type=int, default=0)
+    parser.add_argument("--batch", type=int, default=0)
     args = parser.parse_args()
-    generate(args.output)
+    generate(
+        args.output,
+        user_count=args.user_count,
+        customer_count=args.customer_count,
+        skill_count=args.skill_count,
+        ticket_count=args.ticket_count,
+        id_offset=args.id_offset,
+        batch=args.batch,
+    )
 
 
 if __name__ == "__main__":
