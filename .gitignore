@@ -33,9 +33,19 @@ target/
 .env.*
 !.env.example
 
+# Environment files are loaded from the repository root
+**/.env
+**/.env.*
+!**/.env.example
+
 # Initial data output
 /data/generated/
 /etl/.venv/
+
+# Python build and cache output
+__pycache__/
+*.py[cod]
+*.egg-info/
 
 # Operating system files
 .DS_Store

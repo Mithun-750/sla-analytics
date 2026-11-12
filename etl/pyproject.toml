@@ -18,6 +18,7 @@ dependencies = [
 
 [project.scripts]
 sla-etl = "sync:main"
+sla-outbox-worker = "outbox_worker:run"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

@@ -17,7 +17,7 @@ from psycopg import sql
 from psycopg.rows import dict_row
 
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 TABLES = [
     "users",
