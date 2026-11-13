@@ -58,7 +58,14 @@ pnpm etl:run        # Run the legacy full-table export
 ```
 
 The outbox worker publishes to S3. Configure the database, AWS, and worker
-settings in the root `.env` file.
+settings in the root `.env` file. It writes one deterministic object per
+outbox event, so retrying an event overwrites the same object instead of
+creating a duplicate. Successful uploads are logged every 100 events by
+default; set `OUTBOX_LOG_INTERVAL` to change that interval. The worker uploads batch objects sequentially. Events are written as JSON arrays,
+grouped by source table and ingestion date, with up to 500 events per object.
+Configure this with `OUTBOX_BATCH_SIZE` and
+`OUTBOX_S3_BATCH_SIZE`. The database status is committed for each successfully
+uploaded object. Individual failed batches are always logged.
 
 The outbox worker writes each incremental change under `events/`, `raw/`,
 `clean/`, and `rejected/`. Run `pnpm etl:run` for full-table snapshots and

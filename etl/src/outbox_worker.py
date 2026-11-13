@@ -2,7 +2,6 @@
 import json
 import os
 import time
-import uuid
 from datetime import timezone
 from pathlib import Path
 
@@ -17,9 +16,11 @@ AWS_PROFILE = os.getenv("AWS_PROFILE", "s3-user")
 AWS_REGION = os.getenv("AWS_REGION", "ap-southeast-2")
 S3_BUCKET = os.getenv("S3_BUCKET", "mithun-750-sla")
 
-BATCH_SIZE = int(os.getenv("OUTBOX_BATCH_SIZE", os.getenv("BATCH_SIZE", "100")))
+BATCH_SIZE = int(os.getenv("OUTBOX_BATCH_SIZE", os.getenv("BATCH_SIZE", "500")))
 LOCK_DURATION_SECONDS = int(os.getenv("OUTBOX_CLAIM_TIMEOUT_SECONDS", os.getenv("LOCK_DURATION_SECONDS", "300")))
 POLL_INTERVAL_SECONDS = int(os.getenv("OUTBOX_POLL_INTERVAL_SECONDS", os.getenv("POLL_INTERVAL_SECONDS", "5")))
+LOG_INTERVAL = max(1, int(os.getenv("OUTBOX_LOG_INTERVAL", "10")))
+S3_BATCH_SIZE = max(1, int(os.getenv("OUTBOX_S3_BATCH_SIZE", "500")))
 
 DATABASE_URL = os.getenv("SOURCE_DB_URL") or os.getenv("DATABASE_URL") or "postgresql://localhost:5432/sla"
 DATABASE_USERNAME = os.getenv("SOURCE_DB_USERNAME")
@@ -86,29 +87,32 @@ def claim_events(connection):
     return events
 
 
-def event_key(event):
-    occurred_at = event["occurred_at"].astimezone(timezone.utc)
-    ingestion_date = occurred_at.strftime("%Y-%m-%d")
-
-    attempt_id = uuid.uuid4().hex
-
-    return (
-        f"events/{event['table_name']}/"
-        f"ingestion_date={ingestion_date}/"
-        f"{event['id']}-{attempt_id}.json"
-    )
-
-
-def upload_event(s3, event):
-    key = event_key(event)
-
-    payload = {
+def event_payload(event):
+    return {
         "id": event["id"],
         "table": event["table_name"],
         "operation": event["operation"],
         "occurred_at": event["occurred_at"].isoformat(),
-        "row": event["row_data"]
+        "row": event["row_data"],
     }
+
+
+def batch_key(events):
+    first = events[0]
+    occurred_at = first["occurred_at"].astimezone(timezone.utc)
+    ingestion_date = occurred_at.strftime("%Y-%m-%d")
+    event_ids = sorted(str(event["id"]) for event in events)
+
+    return (
+        f"events/{first['table_name']}/"
+        f"ingestion_date={ingestion_date}/"
+        f"{event_ids[0]}-{event_ids[-1]}-{len(event_ids)}.json"
+    )
+
+
+def upload_batch(s3, events):
+    key = batch_key(events)
+    payload = [event_payload(event) for event in events]
 
     s3.put_object(
         Bucket=S3_BUCKET,
@@ -117,23 +121,30 @@ def upload_event(s3, event):
         ContentType="application/json"
     )
 
-    return key
+    return len(events)
 
 
-def mark_processed(connection, event_id):
+def mark_processed_many(connection, event_ids):
+    if not event_ids:
+        return
+
     query = """
         UPDATE outbox_events
         SET
             processed_at = NOW(),
             locked_until = NULL,
             last_error = NULL
-        WHERE id = %s
+        WHERE id = ANY(%s)
     """
 
-    connection.execute(query, (event_id,))
+    with connection.transaction():
+        connection.execute(query, (event_ids,))
 
 
-def mark_failed(connection, event_id, error):
+def mark_failed_many(connection, failures):
+    if not failures:
+        return
+
     query = """
         UPDATE outbox_events
         SET
@@ -144,32 +155,57 @@ def mark_failed(connection, event_id, error):
         WHERE id = %s
     """
 
-    connection.execute(
-        query,
-        (str(error)[:4000], event_id)
-    )
+    with connection.transaction():
+        connection.executemany(
+            query,
+            [(str(error)[:4000], event_id) for event_id, error in failures],
+        )
 
 
-def process_event(connection, s3, event):
-    event_id = event["id"]
+def group_events(events):
+    groups = {}
+    for event in events:
+        occurred_at = event["occurred_at"].astimezone(timezone.utc)
+        group_key = (event["table_name"], occurred_at.strftime("%Y-%m-%d"))
+        groups.setdefault(group_key, []).append(event)
 
-    try:
-        key = upload_event(s3, event)
+    batches = []
+    for group in groups.values():
+        for start in range(0, len(group), S3_BATCH_SIZE):
+            batches.append(group[start:start + S3_BATCH_SIZE])
+    return batches
 
-        mark_processed(connection, event_id)
 
-        print(f"Uploaded event {event_id}: {key}")
+def process_batch(connection, s3, events):
+    processed_ids = []
+    failures = []
 
-    except Exception as error:
-        mark_failed(connection, event_id, error)
+    for event_batch in group_events(events):
+        try:
+            upload_batch(s3, event_batch)
+            processed_ids.extend(event["id"] for event in event_batch)
+        except Exception as error:
+            failures.extend((event["id"], error) for event in event_batch)
+            print(
+                f"Failed batch {batch_key(event_batch)} "
+                f"({len(event_batch)} events): {error}"
+            )
 
-        print(f"Failed event {event_id}: {error}")
+    mark_processed_many(connection, processed_ids)
+    mark_failed_many(connection, failures)
+    return len(processed_ids), len(failures)
 
 
 def run():
     connection, s3 = create_connections()
 
-    print("Outbox publisher started")
+    print(
+        f"Outbox publisher started (up to {S3_BATCH_SIZE} events per S3 object, "
+        f"progress every {LOG_INTERVAL} events)"
+    )
+    processed_count = 0
+    failed_count = 0
+    next_log_at = LOG_INTERVAL
 
     try:
         while True:
@@ -179,8 +215,16 @@ def run():
                 time.sleep(POLL_INTERVAL_SECONDS)
                 continue
 
-            for event in events:
-                process_event(connection, s3, event)
+            uploaded, failed = process_batch(connection, s3, events)
+            processed_count += uploaded
+            failed_count += failed
+
+            while processed_count + failed_count >= next_log_at:
+                print(
+                    f"Outbox progress: {processed_count} uploaded, "
+                    f"{failed_count} failed"
+                )
+                next_log_at += LOG_INTERVAL
 
     except KeyboardInterrupt:
         print("Stopping outbox publisher")

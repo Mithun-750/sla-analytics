@@ -15,6 +15,9 @@ From the repository root, the recommended command is:
 pnpm data:generate
 ```
 
+The normal seed generates 5,000 tickets. Use `pnpm data:load-temp` when you
+want a smaller 30-ticket batch for quick local testing.
+
 CSV files are written to `data/generated/`, which is ignored as generated
 output. The generated data intentionally includes:
 
@@ -42,5 +45,6 @@ pnpm data:load-temp
 
 This clears `data/temp/`, generates 6 users, 3 customers, 3 skills, and 30
 tickets, then loads them using the next ID range recorded in
-`data/temp-state.json`. Repeating the command creates another non-conflicting
-batch.
+`data/temp-state.json`. Temporary batches use IDs starting at 10,000 so they
+do not conflict with the normal 5,000-ticket seed. Repeating the command
+creates another non-conflicting batch.

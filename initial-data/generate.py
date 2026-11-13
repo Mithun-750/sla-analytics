@@ -14,11 +14,17 @@ from typing import Iterable
 SEED = 750
 START = datetime(2026, 1, 5, 8, 0, tzinfo=timezone.utc)
 ISO = "%Y-%m-%dT%H:%M:%SZ"
+DEFAULT_TICKET_COUNT = 5000
 
 PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"]
 URGENCIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 STATUSES = ["OPEN", "IN_PROGRESS", "PENDING", "RESOLVED", "CLOSED"]
 SLA_SECONDS = {"LOW": 259200, "MEDIUM": 86400, "HIGH": 28800, "URGENT": 14400}
+
+
+def assigned_agent_id(ticket_id: int, agent_count: int, id_offset: int = 0, attempt: int = 0) -> int:
+    local_ticket_id = ticket_id - id_offset
+    return id_offset + ((local_ticket_id - 1 + attempt) % agent_count) + 4
 
 
 def timestamp(value: datetime | None) -> str:
@@ -106,12 +112,17 @@ def build_tickets(
             clock = "PAUSED"
         else:
             clock = "STOPPED"
+        reassignment_count = 2 if ticket_id in (12, 29, 44) else (
+            1 if ticket_id % 5 == 0 else 0
+        )
         rows.append(
             {
                 "id": ticket_id,
                 "ticket_number": f"SLA-{created.year}-{ticket_id:05d}-B{batch}" if batch else f"SLA-{created.year}-{ticket_id:05d}",
                 "customer_id": id_offset + ((local_id - 1) % customers) + 1,
-                "assigned_agent_id": id_offset + ((local_id * 3) % agent_count) + 4,
+                "assigned_agent_id": assigned_agent_id(
+                    ticket_id, agent_count, id_offset, reassignment_count
+                ),
                 "required_skill_id": id_offset + ((local_id - 1) % skills) + 1,
                 "sla_policy_key": f"{priority.lower()}-standard",
                 "sla_policy_version": "2026.1",
@@ -137,9 +148,7 @@ def build_tickets(
                     "HIGH" if breached else "MEDIUM"
                 ),
                 "reopened_count": 1 if ticket_id in (14, 29, 46) else 0,
-                "reassignment_count": 2 if ticket_id in (12, 29, 44) else (
-                    1 if ticket_id % 5 == 0 else 0
-                ),
+                "reassignment_count": reassignment_count,
                 "first_assigned_at": timestamp(created + timedelta(minutes=18)),
                 "resolved_at": timestamp(resolved_at),
                 "created_at": timestamp(created),
@@ -169,7 +178,7 @@ def build_events(tickets: list[dict[str, object]], users: int, id_offset: int = 
                 {
                     "id": f"00000000-0000-4000-8000-{event_id:012d}",
                     "ticket_id": ticket_id,
-                    "actor_id": id_offset + ((ticket_id + version) % agent_count) + 4,
+                    "actor_id": assigned_agent_id(ticket_id + version, agent_count, id_offset),
                     "actor_type": "SYSTEM" if event_type == "CREATED" else "USER",
                     "event_type": event_type,
                     "event_version": version,
@@ -199,7 +208,9 @@ def build_assignments(tickets: list[dict[str, object]], users: int, id_offset: i
                 {
                     "id": assignment_id,
                     "ticket_id": ticket["id"],
-                    "agent_id": id_offset + ((int(ticket["id"]) * 3 + attempt) % agent_count) + 4,
+                    "agent_id": assigned_agent_id(
+                        int(ticket["id"]), agent_count, id_offset, attempt
+                    ),
                     "assigned_by": id_offset + (1 if attempt else 3),
                     "assignment_type": "REASSIGNMENT" if attempt else "ROUTED",
                     "routing_score": f"{0.61 + attempt * 0.08:.2f}",
@@ -281,7 +292,7 @@ def generate(
     user_count: int = 12,
     customer_count: int = 6,
     skill_count: int = 6,
-    ticket_count: int = 60,
+    ticket_count: int = DEFAULT_TICKET_COUNT,
     id_offset: int = 0,
     batch: int = 0,
 ) -> None:
@@ -338,7 +349,7 @@ def main() -> None:
     parser.add_argument("--user-count", type=int, default=12)
     parser.add_argument("--customer-count", type=int, default=6)
     parser.add_argument("--skill-count", type=int, default=6)
-    parser.add_argument("--ticket-count", type=int, default=60)
+    parser.add_argument("--ticket-count", type=int, default=DEFAULT_TICKET_COUNT)
     parser.add_argument("--id-offset", type=int, default=0)
     parser.add_argument("--batch", type=int, default=0)
     args = parser.parse_args()
