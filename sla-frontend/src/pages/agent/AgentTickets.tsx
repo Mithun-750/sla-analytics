@@ -3,40 +3,93 @@ import { useAuth } from '../../store/auth';
 import { useTickets } from '../../api/hooks';
 import TicketTable from '../../components/TicketTable';
 import Spinner from '../../components/Spinner';
-import type { TicketStatus } from '../../api/types';
-
-const STATUS_OPTIONS: Array<TicketStatus | ''> = [
-  '', 'NEW', 'ASSIGNED', 'IN_PROGRESS', 'PENDING_CUSTOMER', 'ESCALATED', 'RESOLVED', 'CLOSED',
-];
+import Pagination from '../../components/Pagination';
 
 export default function AgentTickets() {
   const { user } = useAuth();
+  const [page, setPage] = useState(0);
+  const [search, setSearch] = useState('');
   const [status, setStatus] = useState<string>('');
+  const [priority, setPriority] = useState<string>('');
+
   const { data, isLoading, isError } = useTickets(
-    { agentId: user?.id, status: status || undefined },
-    0,
-    100,
+    {
+      agentId: user?.id,
+      search: search || undefined,
+      status: status || undefined,
+      priority: priority || undefined,
+    },
+    page,
+    15,
   );
 
   return (
-    <div>
-      <div className="flex items-center gap-4 mb-6">
-        <h1 className="text-xl font-bold text-gray-800">My Tickets</h1>
-        <select
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-        >
-          {STATUS_OPTIONS.map((s) => (
-            <option key={s} value={s}>{s || 'All Statuses'}</option>
-          ))}
-        </select>
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-gray-800">My Assigned Tickets</h1>
+          <p className="text-sm text-gray-500 mt-1">Filter, search, and manage your ticket queue</p>
+        </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+        {/* Filters */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(0);
+            }}
+            placeholder="Search by ticket #, subject..."
+            className="flex-1 border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+          />
+          <select
+            value={status}
+            onChange={(e) => {
+              setStatus(e.target.value);
+              setPage(0);
+            }}
+            className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+          >
+            <option value="">All Statuses</option>
+            <option value="OPEN">Open</option>
+            <option value="IN_PROGRESS">In Progress</option>
+            <option value="PENDING">Pending</option>
+            <option value="RESOLVED">Resolved</option>
+            <option value="CLOSED">Closed</option>
+          </select>
+          <select
+            value={priority}
+            onChange={(e) => {
+              setPriority(e.target.value);
+              setPage(0);
+            }}
+            className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+          >
+            <option value="">All Priorities</option>
+            <option value="LOW">Low</option>
+            <option value="MEDIUM">Medium</option>
+            <option value="HIGH">High</option>
+            <option value="URGENT">Urgent</option>
+          </select>
+        </div>
+
         {isLoading && <Spinner />}
         {isError && <p className="text-red-500 text-sm">Failed to load tickets.</p>}
-        {data && <TicketTable tickets={data.content} detailBasePath="/agent/ticket" />}
+        {data && (
+          <div>
+            <TicketTable tickets={data.content} detailBasePath="/agent/ticket" />
+            <Pagination
+              page={data.page}
+              totalPages={data.totalPages}
+              totalElements={data.totalElements}
+              onPageChange={setPage}
+              entityName="tickets"
+            />
+          </div>
+        )}
       </div>
     </div>
   );

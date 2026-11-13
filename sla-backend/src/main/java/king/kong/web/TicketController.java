@@ -9,6 +9,9 @@ import king.kong.dto.TicketPauseDto;
 import king.kong.dto.TicketSummaryDto;
 import king.kong.service.PauseService;
 import king.kong.service.TicketService;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -37,13 +40,14 @@ public class TicketController {
 
     @GetMapping
     public ResponseEntity<PagedResponse<TicketSummaryDto>> getTickets(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String search,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) Integer customerId,
             @RequestParam(required = false) Integer agentId,
-            @RequestParam(required = false) String priority) {
-        return ResponseEntity.ok(ticketService.getTickets(status, customerId, agentId, priority, page, size));
+            @RequestParam(required = false) String priority,
+            @PageableDefault(page = 0, size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
+            Pageable pageable) {
+        return ResponseEntity.ok(ticketService.getTickets(search, status, customerId, agentId, priority, pageable));
     }
 
     @GetMapping("/{id}")
@@ -53,12 +57,19 @@ public class TicketController {
 
     @PostMapping
     public ResponseEntity<TicketSummaryDto> createTicket(@RequestBody CreateTicketRequest request) {
+        if (request.getCustomerId() == null) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
+        if (request.getSubject() == null || request.getSubject().trim().isEmpty()) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
+
         Integer skillId = request.getRequiredSkillId() != null
                 ? request.getRequiredSkillId()
                 : request.getSkillId();
         TicketSummaryDto created = ticketService.createTicket(
                 request.getCustomerId(),
-                request.getSubject(),
+                request.getSubject().trim(),
                 request.getDescription(),
                 request.getUrgency(),
                 request.getPriority(),
@@ -71,6 +82,9 @@ public class TicketController {
             @PathVariable Integer id,
             @RequestBody Map<String, String> body) {
         String status = body.get("status");
+        if (status == null || status.trim().isEmpty()) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
         return ResponseEntity.ok(ticketService.updateStatus(id, status));
     }
 
@@ -78,6 +92,9 @@ public class TicketController {
     public ResponseEntity<TicketSummaryDto> patchAssign(
             @PathVariable Integer id,
             @RequestBody AssignRequest request) {
+        if (request.getAgentId() == null) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
         Integer assignedById = request.getAssignedById() != null
                 ? request.getAssignedById()
                 : request.getAgentId();
@@ -88,6 +105,9 @@ public class TicketController {
     public ResponseEntity<TicketSummaryDto> postAssign(
             @PathVariable Integer id,
             @RequestBody AssignRequest request) {
+        if (request.getAgentId() == null) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
         Integer assignedById = request.getAssignedById() != null
                 ? request.getAssignedById()
                 : request.getAgentId();
@@ -119,9 +139,15 @@ public class TicketController {
             @PathVariable Integer id,
             @RequestBody Map<String, Object> body) {
         String reason = (String) body.get("reason");
+        if (reason == null || reason.trim().isEmpty()) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
         Integer agentId = body.get("agentId") != null
                 ? ((Number) body.get("agentId")).intValue()
-                : ((Number) body.get("initiatedById")).intValue();
+                : (body.get("initiatedById") != null ? ((Number) body.get("initiatedById")).intValue() : null);
+        if (agentId == null) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
         return new ResponseEntity<>(pauseService.request(id, agentId, reason), HttpStatus.CREATED);
     }
 

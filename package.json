@@ -14,11 +14,19 @@
     "data:drop": "cat scripts/drop-data.sql | docker compose exec -T postgres psql -U postgres -d sla",
     "data:load": "pnpm db:up && pnpm data:generate && uv run --project initial-data python initial-data/load.py",
     "data:load-temp": "pnpm db:up && uv run --project initial-data python initial-data/temp_load.py",
-    "app:run": "cd sla-backend && mvn spring-boot:run",
+    "be:run": "cd sla-backend && mvn spring-boot:run",
+    "be:build": "cd sla-backend && mvn package",
+    "be:compile": "cd sla-backend && mvn compile",
+    "be:test": "cd sla-backend && mvn test",
+    "be:checkstyle": "cd sla-backend && mvn checkstyle:check",
+    "fe:dev": "pnpm --filter sla-frontend dev",
+    "fe:build": "pnpm --filter sla-frontend build",
+    "fe:lint": "pnpm --filter sla-frontend lint",
+    "fe:preview": "pnpm --filter sla-frontend preview",
     "start": "bash scripts/start.sh",
     "etl:run": "uv run --project etl sla-etl",
     "etl:sync": "uv sync --project etl",
-    "test": "cd sla-backend && mvn test",
-    "build": "cd sla-backend && mvn package"
+    "test": "pnpm be:test",
+    "build": "pnpm be:build && pnpm fe:build"
   }
 }

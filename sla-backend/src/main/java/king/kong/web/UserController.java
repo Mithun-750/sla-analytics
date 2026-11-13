@@ -3,6 +3,9 @@ package king.kong.web;
 import king.kong.dto.PagedResponse;
 import king.kong.dto.UserDto;
 import king.kong.service.UserService;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -32,9 +35,9 @@ public class UserController {
     public ResponseEntity<PagedResponse<UserDto>> getUsers(
             @RequestParam(required = false) String role,
             @RequestParam(required = false) String search,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(userService.getUsers(role, search, page, size));
+            @PageableDefault(page = 0, size = 20, sort = "username", direction = Sort.Direction.ASC)
+            Pageable pageable) {
+        return ResponseEntity.ok(userService.getUsers(role, search, pageable));
     }
 
     @GetMapping("/{id}")
@@ -44,8 +47,14 @@ public class UserController {
 
     @PostMapping
     public ResponseEntity<UserDto> createUser(@RequestBody CreateUserRequest request) {
+        if (request.getUsername() == null || request.getUsername().trim().isEmpty()) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
+        if (request.getRole() == null || request.getRole().trim().isEmpty()) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
         UserDto created = userService.createUser(
-                request.getUsername(), request.getRole(), request.getMaxConcurrentTickets());
+                request.getUsername().trim(), request.getRole().trim(), request.getMaxConcurrentTickets());
         return new ResponseEntity<>(created, HttpStatus.CREATED);
     }
 
@@ -53,21 +62,29 @@ public class UserController {
     public ResponseEntity<UserDto> toggleAvailability(
             @PathVariable Integer id,
             @RequestBody Map<String, Boolean> body) {
-        boolean available = body.getOrDefault("available", true);
+        Boolean available = body.get("available");
+        if (available == null) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
         return ResponseEntity.ok(userService.toggleAvailability(id, available));
     }
 
+    @GetMapping("/{id}/skills")
+    public ResponseEntity<List<UserDto.UserSkillDto>> getUserSkills(@PathVariable Integer id) {
+        return ResponseEntity.ok(userService.getUserSkills(id));
+    }
+
     @PutMapping("/{id}/skills")
-    public ResponseEntity<UserDto> updateSkills(
+    public ResponseEntity<UserDto> updateUserSkills(
             @PathVariable Integer id,
-            @RequestBody List<UserService.SkillUpdateRequest> skillRequests) {
-        return ResponseEntity.ok(userService.updateUserSkills(id, skillRequests));
+            @RequestBody List<UserService.SkillUpdateRequest> skills) {
+        return ResponseEntity.ok(userService.updateUserSkills(id, skills));
     }
 
     public static class CreateUserRequest {
         private String username;
         private String role;
-        private int maxConcurrentTickets;
+        private int maxConcurrentTickets = 5;
 
         public String getUsername() {
             return username;
@@ -94,4 +111,3 @@ public class UserController {
         }
     }
 }
-

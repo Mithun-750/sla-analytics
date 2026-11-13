@@ -54,6 +54,7 @@ export function useSkills() {
 
 // ---- Tickets ----
 export interface TicketFilters {
+  search?: string;
   status?: string;
   customerId?: number;
   agentId?: number;
@@ -86,24 +87,30 @@ export function useTicketEvents(id: number | undefined) {
 
 // ---- Escalations ----
 export interface EscalationFilters {
+  search?: string;
   status?: string;
   supervisorId?: number;
 }
 
-export function useEscalations(filters: EscalationFilters = {}) {
+export function useEscalations(filters: EscalationFilters = {}, page = 0, size = 20) {
   return useQuery<PagedResponse<TicketEscalation>>({
-    queryKey: ['escalations', filters],
+    queryKey: ['escalations', filters, page, size],
     queryFn: () =>
-      client.get('/escalations', { params: { ...filters, size: 50 } }).then((r) => r.data),
+      client.get('/escalations', { params: { ...filters, page, size } }).then((r) => r.data),
   });
 }
 
 // ---- Pauses ----
-export function usePauses(status?: string) {
+export interface PauseFilters {
+  search?: string;
+  status?: string;
+}
+
+export function usePauses(filters: PauseFilters = {}, page = 0, size = 20) {
   return useQuery<PagedResponse<TicketPause>>({
-    queryKey: ['pauses', status],
+    queryKey: ['pauses', filters, page, size],
     queryFn: () =>
-      client.get('/pauses', { params: { status, size: 50 } }).then((r) => r.data),
+      client.get('/pauses', { params: { ...filters, page, size } }).then((r) => r.data),
   });
 }
 
@@ -132,6 +139,7 @@ export function useCreateTicket() {
       subject: string;
       description?: string;
       urgency?: string;
+      priority?: string;
       skillId?: number;
       customerId: number;
     }) => client.post('/tickets', data).then((r) => r.data),
@@ -147,6 +155,8 @@ export function useUpdateTicketStatus() {
     onSuccess: (_d, v) => {
       qc.invalidateQueries({ queryKey: ['ticket', v.id] });
       qc.invalidateQueries({ queryKey: ['tickets'] });
+      qc.invalidateQueries({ queryKey: ['stats'] });
+      qc.invalidateQueries({ queryKey: ['agent-stats'] });
     },
   });
 }
@@ -154,11 +164,13 @@ export function useUpdateTicketStatus() {
 export function useAssignTicket() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, agentId }: { id: number; agentId: number }) =>
-      client.post(`/tickets/${id}/assign`, { agentId }).then((r) => r.data),
+    mutationFn: ({ id, agentId, assignedById }: { id: number; agentId: number; assignedById?: number }) =>
+      client.post(`/tickets/${id}/assign`, { agentId, assignedById }).then((r) => r.data),
     onSuccess: (_d, v) => {
       qc.invalidateQueries({ queryKey: ['ticket', v.id] });
       qc.invalidateQueries({ queryKey: ['tickets'] });
+      qc.invalidateQueries({ queryKey: ['stats'] });
+      qc.invalidateQueries({ queryKey: ['agent-stats'] });
     },
   });
 }
@@ -166,9 +178,12 @@ export function useAssignTicket() {
 export function useCreateEscalation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ ticketId, reason }: { ticketId: number; reason: string }) =>
-      client.post('/escalations', { ticketId, reason }).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['escalations'] }),
+    mutationFn: ({ ticketId, createdById, reason, description }: { ticketId: number; createdById?: number; reason: string; description?: string }) =>
+      client.post(`/escalations/tickets/${ticketId}/escalations`, { createdById, reason, description }).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['escalations'] });
+      qc.invalidateQueries({ queryKey: ['stats'] });
+    },
   });
 }
 
@@ -177,16 +192,22 @@ export function useClaimEscalation() {
   return useMutation({
     mutationFn: ({ id, supervisorId }: { id: number; supervisorId: number }) =>
       client.post(`/escalations/${id}/claim`, { supervisorId }).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['escalations'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['escalations'] });
+      qc.invalidateQueries({ queryKey: ['stats'] });
+    },
   });
 }
 
 export function useResolveEscalation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, resolutionNote }: { id: number; resolutionNote: string }) =>
-      client.post(`/escalations/${id}/resolve`, { resolutionNote }).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['escalations'] }),
+    mutationFn: ({ id, resolutionNotes }: { id: number; resolutionNotes: string }) =>
+      client.post(`/escalations/${id}/resolve`, { resolutionNotes }).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['escalations'] });
+      qc.invalidateQueries({ queryKey: ['stats'] });
+    },
   });
 }
 
@@ -198,6 +219,7 @@ export function useRequestPause() {
     onSuccess: (_d, v) => {
       qc.invalidateQueries({ queryKey: ['ticket', v.ticketId] });
       qc.invalidateQueries({ queryKey: ['pauses'] });
+      qc.invalidateQueries({ queryKey: ['stats'] });
     },
   });
 }
@@ -207,16 +229,23 @@ export function useApprovePause() {
   return useMutation({
     mutationFn: ({ id, supervisorId }: { id: number; supervisorId: number }) =>
       client.post(`/pauses/${id}/approve`, { supervisorId }).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['pauses'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pauses'] });
+      qc.invalidateQueries({ queryKey: ['tickets'] });
+      qc.invalidateQueries({ queryKey: ['stats'] });
+    },
   });
 }
 
 export function useRejectPause() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, supervisorId }: { id: number; supervisorId: number }) =>
-      client.post(`/pauses/${id}/reject`, { supervisorId }).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['pauses'] }),
+    mutationFn: ({ id, supervisorId, remarks }: { id: number; supervisorId: number; remarks?: string }) =>
+      client.post(`/pauses/${id}/reject`, { supervisorId, remarks }).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pauses'] });
+      qc.invalidateQueries({ queryKey: ['stats'] });
+    },
   });
 }
 
@@ -225,7 +254,11 @@ export function useResumePause() {
   return useMutation({
     mutationFn: ({ id }: { id: number }) =>
       client.post(`/pauses/${id}/resume`).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['pauses'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pauses'] });
+      qc.invalidateQueries({ queryKey: ['tickets'] });
+      qc.invalidateQueries({ queryKey: ['stats'] });
+    },
   });
 }
 

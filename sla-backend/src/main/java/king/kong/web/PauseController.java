@@ -3,6 +3,9 @@ package king.kong.web;
 import king.kong.dto.PagedResponse;
 import king.kong.dto.TicketPauseDto;
 import king.kong.service.PauseService;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,20 +31,27 @@ public class PauseController {
 
     @GetMapping
     public ResponseEntity<PagedResponse<TicketPauseDto>> getPauses(
+            @RequestParam(required = false) String search,
             @RequestParam(required = false) String status,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(pauseService.getPausesByStatus(status, page, size));
+            @PageableDefault(page = 0, size = 20, sort = "requestedAt", direction = Sort.Direction.DESC)
+            Pageable pageable) {
+        return ResponseEntity.ok(pauseService.getPauses(search, status, pageable));
     }
 
     @PostMapping("/tickets/{ticketId}/pauses")
     public ResponseEntity<TicketPauseDto> createPauseForTicket(
             @PathVariable Integer ticketId,
             @RequestBody CreatePauseRequest request) {
+        if (request.getReason() == null || request.getReason().trim().isEmpty()) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
         Integer initiatedById = request.getInitiatedById() != null
                 ? request.getInitiatedById()
                 : request.getAgentId();
-        TicketPauseDto created = pauseService.request(ticketId, initiatedById, request.getReason());
+        if (initiatedById == null) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
+        TicketPauseDto created = pauseService.request(ticketId, initiatedById, request.getReason().trim());
         return new ResponseEntity<>(created, HttpStatus.CREATED);
     }
 
@@ -49,42 +59,48 @@ public class PauseController {
     public ResponseEntity<TicketPauseDto> patchApprove(
             @PathVariable Integer id,
             @RequestBody Map<String, Integer> body) {
-        Integer approvedById = body.containsKey("approvedById")
-                ? body.get("approvedById")
-                : body.get("supervisorId");
-        return ResponseEntity.ok(pauseService.approve(id, approvedById));
+        Integer supervisorId = body.get("supervisorId");
+        if (supervisorId == null) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
+        return ResponseEntity.ok(pauseService.approve(id, supervisorId));
     }
 
     @PostMapping("/{id}/approve")
     public ResponseEntity<TicketPauseDto> postApprove(
             @PathVariable Integer id,
             @RequestBody Map<String, Integer> body) {
-        Integer approvedById = body.containsKey("approvedById")
-                ? body.get("approvedById")
-                : body.get("supervisorId");
-        return ResponseEntity.ok(pauseService.approve(id, approvedById));
+        Integer supervisorId = body.get("supervisorId");
+        if (supervisorId == null) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
+        return ResponseEntity.ok(pauseService.approve(id, supervisorId));
     }
 
     @PatchMapping("/{id}/reject")
     public ResponseEntity<TicketPauseDto> patchReject(
             @PathVariable Integer id,
             @RequestBody Map<String, Object> body) {
-        Integer approvedById = body.containsKey("approvedById")
-                ? ((Number) body.get("approvedById")).intValue()
-                : ((Number) body.get("supervisorId")).intValue();
+        Integer supervisorId = body.get("supervisorId") != null
+                ? ((Number) body.get("supervisorId")).intValue() : null;
+        if (supervisorId == null) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
         String remarks = (String) body.get("remarks");
-        return ResponseEntity.ok(pauseService.reject(id, approvedById, remarks));
+        return ResponseEntity.ok(pauseService.reject(id, supervisorId, remarks));
     }
 
     @PostMapping("/{id}/reject")
     public ResponseEntity<TicketPauseDto> postReject(
             @PathVariable Integer id,
             @RequestBody Map<String, Object> body) {
-        Integer approvedById = body.containsKey("approvedById")
-                ? ((Number) body.get("approvedById")).intValue()
-                : ((Number) body.get("supervisorId")).intValue();
+        Integer supervisorId = body.get("supervisorId") != null
+                ? ((Number) body.get("supervisorId")).intValue() : null;
+        if (supervisorId == null) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
         String remarks = (String) body.get("remarks");
-        return ResponseEntity.ok(pauseService.reject(id, approvedById, remarks));
+        return ResponseEntity.ok(pauseService.reject(id, supervisorId, remarks));
     }
 
     @PatchMapping("/{id}/resume")
@@ -127,4 +143,3 @@ public class PauseController {
         }
     }
 }
-

@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../store/auth';
 
 interface NavItem {
@@ -43,7 +43,13 @@ function getNavItems(user: ReturnType<typeof useAuth>['user']): NavItem[] {
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const navItems = getNavItems(user);
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
+  };
 
   return (
     <div className="flex h-screen bg-[#f9fafb]">
@@ -87,10 +93,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
         <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shrink-0">
-          <span className="text-sm text-gray-700 font-medium">{user?.username}</span>
+          <span className="text-sm text-gray-700 font-medium">
+            {user?.username} <span className="text-xs text-gray-400 font-normal">({user?.role ?? user?.type} #{user?.id})</span>
+          </span>
           <button
-            onClick={logout}
-            className="text-sm text-gray-500 hover:text-gray-800 transition-colors"
+            onClick={handleLogout}
+            className="text-sm text-gray-500 hover:text-red-600 transition-colors font-medium cursor-pointer"
           >
             Logout
           </button>

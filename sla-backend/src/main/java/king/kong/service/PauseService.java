@@ -11,7 +11,7 @@ import king.kong.repository.TicketPauseRepository;
 import king.kong.repository.TicketRepository;
 import king.kong.repository.UserRepository;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,24 +36,17 @@ public class PauseService {
     }
 
     @Transactional(readOnly = true)
-    public PagedResponse<TicketPauseDto> getPendingApprovals(int page, int size) {
-        return getPausesByStatus("REQUESTED", page, size);
-    }
+    public PagedResponse<TicketPauseDto> getPauses(String search, String status, Pageable pageable) {
+        PauseDecisionStatus pds = (status != null && !status.isBlank())
+                ? PauseDecisionStatus.valueOf(status.toUpperCase()) : null;
+        String s = (search != null && !search.isBlank()) ? search.trim() : "";
 
-    @Transactional(readOnly = true)
-    public PagedResponse<TicketPauseDto> getPausesByStatus(String status, int page, int size) {
-        PageRequest pr = PageRequest.of(page, size);
-        Page<TicketPause> result;
-        if (status != null && !status.isBlank()) {
-            PauseDecisionStatus pds = PauseDecisionStatus.valueOf(status.toUpperCase());
-            result = ticketPauseRepository.findByDecisionStatus(pds, pr);
-        } else {
-            result = ticketPauseRepository.findAll(pr);
-        }
+        Page<TicketPause> result = ticketPauseRepository.searchPauses(pds, s, pageable);
         List<TicketPauseDto> dtos = result.getContent().stream()
                 .map(this::toDto)
                 .collect(Collectors.toList());
-        return new PagedResponse<>(dtos, page, size, result.getTotalElements(), result.getTotalPages());
+        return new PagedResponse<>(dtos, pageable.getPageNumber(), pageable.getPageSize(),
+                result.getTotalElements(), result.getTotalPages());
     }
 
     @Transactional
@@ -155,4 +148,3 @@ public class PauseService {
         return dto;
     }
 }
-

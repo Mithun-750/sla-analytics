@@ -8,17 +8,21 @@ pnpm db:outbox
 
 backend_pid=
 worker_pid=
+frontend_pid=
 
 cleanup() {
-    kill "$backend_pid" "$worker_pid" 2>/dev/null || true
+    kill "$backend_pid" "$worker_pid" "$frontend_pid" 2>/dev/null || true
 }
 
 trap cleanup EXIT INT TERM
 
-pnpm app:run &
+pnpm be:run &
 backend_pid=$!
 
 uv run --project etl sla-outbox-worker &
 worker_pid=$!
 
-wait -n "$backend_pid" "$worker_pid"
+pnpm fe:dev &
+frontend_pid=$!
+
+wait -n "$backend_pid" "$worker_pid" "$frontend_pid"

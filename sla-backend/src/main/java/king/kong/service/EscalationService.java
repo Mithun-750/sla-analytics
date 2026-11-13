@@ -10,7 +10,7 @@ import king.kong.repository.TicketEscalationRepository;
 import king.kong.repository.TicketRepository;
 import king.kong.repository.UserRepository;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,22 +34,18 @@ public class EscalationService {
     }
 
     @Transactional(readOnly = true)
-    public PagedResponse<TicketEscalationDto> list(String status, Integer supervisorId, int page, int size) {
-        PageRequest pr = PageRequest.of(page, size);
-        Page<TicketEscalation> result;
-        if (status != null && !status.isBlank()) {
-            EscalationStatus es = EscalationStatus.valueOf(status.toUpperCase());
-            result = ticketEscalationRepository.findByStatus(es, pr);
-        } else if (supervisorId != null) {
-            result = ticketEscalationRepository.findByOwnerSupervisorId(supervisorId, pr);
-        } else {
-            result = ticketEscalationRepository.findAll(pr);
-        }
+    public PagedResponse<TicketEscalationDto> list(String search, String status, Integer supervisorId, Pageable pageable) {
+        EscalationStatus es = (status != null && !status.isBlank())
+                ? EscalationStatus.valueOf(status.toUpperCase()) : null;
+        String s = (search != null && !search.isBlank()) ? search.trim() : "";
+
+        Page<TicketEscalation> result = ticketEscalationRepository.searchEscalations(es, supervisorId, s, pageable);
 
         List<TicketEscalationDto> dtos = result.getContent().stream()
                 .map(this::toDto)
                 .collect(Collectors.toList());
-        return new PagedResponse<>(dtos, page, size, result.getTotalElements(), result.getTotalPages());
+        return new PagedResponse<>(dtos, pageable.getPageNumber(), pageable.getPageSize(),
+                result.getTotalElements(), result.getTotalPages());
     }
 
     @Transactional
@@ -126,4 +122,3 @@ public class EscalationService {
         return dto;
     }
 }
-

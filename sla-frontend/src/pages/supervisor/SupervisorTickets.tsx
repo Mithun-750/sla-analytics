@@ -5,15 +5,23 @@ import StatusBadge from '../../components/StatusBadge';
 import SlaBar from '../../components/SlaBar';
 import Spinner from '../../components/Spinner';
 import InfiniteSelect from '../../components/InfiniteSelect';
+import Pagination from '../../components/Pagination';
 import type { TicketSummary, User } from '../../api/types';
 
 export default function SupervisorTickets() {
   const [page, setPage] = useState(0);
+  const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [priorityFilter, setPriorityFilter] = useState('');
+
   const { data, isLoading, isError } = useTickets(
-    { status: statusFilter || undefined },
+    {
+      search: search || undefined,
+      status: statusFilter || undefined,
+      priority: priorityFilter || undefined,
+    },
     page,
-    20,
+    15,
   );
 
   const assignMutation = useAssignTicket();
@@ -21,9 +29,9 @@ export default function SupervisorTickets() {
   const [selectedAgent, setSelectedAgent] = useState<User | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
 
-  const fetchAgents = useCallback(async (search: string, p: number) => {
+  const fetchAgents = useCallback(async (q: string, p: number) => {
     const res = await client.get('/users', {
-      params: { role: 'AGENT', search, page: p, size: 20 },
+      params: { role: 'AGENT', search: q, page: p, size: 20 },
     });
     return {
       items: res.data.content as User[],
@@ -48,12 +56,26 @@ export default function SupervisorTickets() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-gray-800">All Tickets</h1>
-          <p className="text-sm text-gray-500 mt-1">Supervise and reassign tickets across the team</p>
+          <h1 className="text-xl font-bold text-gray-800">Support Ticket Routing</h1>
+          <p className="text-sm text-gray-500 mt-1">Review active queue and reassign tickets</p>
         </div>
-        <div className="flex gap-2">
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+        {/* Search & Filters */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(0);
+            }}
+            placeholder="Search by ticket #, subject..."
+            className="flex-1 border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+          />
           <select
             value={statusFilter}
             onChange={(e) => {
@@ -63,18 +85,28 @@ export default function SupervisorTickets() {
             className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
           >
             <option value="">All Statuses</option>
-            <option value="NEW">New</option>
-            <option value="ASSIGNED">Assigned</option>
+            <option value="OPEN">Open</option>
             <option value="IN_PROGRESS">In Progress</option>
-            <option value="PENDING_CUSTOMER">Pending Customer</option>
-            <option value="ESCALATED">Escalated</option>
+            <option value="PENDING">Pending</option>
             <option value="RESOLVED">Resolved</option>
             <option value="CLOSED">Closed</option>
           </select>
+          <select
+            value={priorityFilter}
+            onChange={(e) => {
+              setPriorityFilter(e.target.value);
+              setPage(0);
+            }}
+            className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+          >
+            <option value="">All Priorities</option>
+            <option value="LOW">Low</option>
+            <option value="MEDIUM">Medium</option>
+            <option value="HIGH">High</option>
+            <option value="URGENT">Urgent</option>
+          </select>
         </div>
-      </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
         {isLoading && <Spinner />}
         {isError && <p className="text-red-500 text-sm">Failed to load tickets.</p>}
 
@@ -90,14 +122,14 @@ export default function SupervisorTickets() {
                     <th className="pb-2 pr-4 font-medium">Priority</th>
                     <th className="pb-2 pr-4 font-medium">Customer</th>
                     <th className="pb-2 pr-4 font-medium">Agent</th>
-                    <th className="pb-2 pr-4 font-medium w-32">SLA</th>
+                    <th className="pb-2 pr-4 font-medium w-36">SLA</th>
                     <th className="pb-2 font-medium text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {data.content.map((t) => (
                     <tr key={t.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="py-2.5 pr-4 font-mono text-xs text-blue-600 font-medium">
+                      <td className="py-2.5 pr-4 font-mono text-xs text-blue-600">
                         {t.ticketNumber}
                       </td>
                       <td className="py-2.5 pr-4 max-w-xs truncate text-gray-800">{t.subject}</td>
@@ -108,10 +140,12 @@ export default function SupervisorTickets() {
                         <StatusBadge value={t.priority} />
                       </td>
                       <td className="py-2.5 pr-4 text-gray-600">{t.customerName}</td>
-                      <td className="py-2.5 pr-4 text-gray-600 font-medium">
-                        {t.assignedAgentUsername ?? <span className="text-gray-400 italic">Unassigned</span>}
+                      <td className="py-2.5 pr-4 text-gray-600">
+                        {t.assignedAgentUsername ?? (
+                          <span className="text-amber-600 text-xs font-medium">Unassigned</span>
+                        )}
                       </td>
-                      <td className="py-2.5 pr-4 w-32">
+                      <td className="py-2.5 pr-4 w-36">
                         <SlaBar consumed={t.slaConsumedSeconds} target={t.slaTargetSeconds} />
                       </td>
                       <td className="py-2.5 text-right whitespace-nowrap">
@@ -121,9 +155,9 @@ export default function SupervisorTickets() {
                             setSelectedAgent(null);
                             setErrorMsg('');
                           }}
-                          className="bg-blue-50 text-blue-700 hover:bg-blue-100 px-3 py-1 rounded text-xs font-medium transition-colors"
+                          className="border border-gray-300 hover:bg-gray-100 text-gray-700 px-3 py-1 rounded text-xs font-medium transition-colors cursor-pointer"
                         >
-                          Reassign
+                          {t.assignedAgentId ? 'Reassign' : 'Assign'}
                         </button>
                       </td>
                     </tr>
@@ -132,42 +166,29 @@ export default function SupervisorTickets() {
               </table>
             </div>
 
-            {/* Pagination */}
-            <div className="flex items-center justify-between border-t border-gray-100 pt-4 mt-4 text-xs text-gray-500">
-              <span>
-                Page {data.page + 1} of {Math.max(1, data.totalPages)} ({data.totalElements} total)
-              </span>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setPage((p) => Math.max(0, p - 1))}
-                  disabled={data.page === 0}
-                  className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
-                >
-                  Previous
-                </button>
-                <button
-                  onClick={() => setPage((p) => p + 1)}
-                  disabled={data.page >= data.totalPages - 1}
-                  className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
+            <Pagination
+              page={data.page}
+              totalPages={data.totalPages}
+              totalElements={data.totalElements}
+              onPageChange={setPage}
+              entityName="tickets"
+            />
           </div>
         )}
       </div>
 
-      {/* Reassign Modal */}
+      {/* Assignment Modal */}
       {selectedTicket && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
-            <h3 className="text-base font-semibold text-gray-800 mb-1">
-              Reassign Ticket {selectedTicket.ticketNumber}
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl space-y-4">
+            <h3 className="text-base font-semibold text-gray-800">
+              Assign Agent to {selectedTicket.ticketNumber}
             </h3>
-            <p className="text-xs text-gray-500 mb-4">{selectedTicket.subject}</p>
+            <p className="text-xs text-gray-500">
+              Select an available support agent to handle this ticket.
+            </p>
 
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Select Agent</label>
                 <InfiniteSelect<User>
@@ -196,7 +217,7 @@ export default function SupervisorTickets() {
                   disabled={!selectedAgent || assignMutation.isPending}
                   className="bg-blue-600 text-white rounded-md px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
                 >
-                  {assignMutation.isPending ? 'Assigning…' : 'Reassign'}
+                  {assignMutation.isPending ? 'Assigning…' : 'Assign Ticket'}
                 </button>
               </div>
             </div>

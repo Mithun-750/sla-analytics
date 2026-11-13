@@ -1,5 +1,6 @@
 package king.kong.service;
 
+import king.kong.dto.PagedResponse;
 import king.kong.dto.UserDto;
 import king.kong.model.Skill;
 import king.kong.model.User;
@@ -10,7 +11,7 @@ import king.kong.repository.SkillRepository;
 import king.kong.repository.UserRepository;
 import king.kong.repository.UserSkillRepository;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,25 +34,15 @@ public class UserService {
     }
 
     @Transactional(readOnly = true)
-    public king.kong.dto.PagedResponse<UserDto> getUsers(String role, String search, int page, int size) {
-        PageRequest pr = PageRequest.of(page, size);
-        Page<User> result;
-        if (role != null && !role.isBlank()) {
-            UserRole userRole = UserRole.valueOf(role.toUpperCase());
-            if (search != null && !search.isBlank()) {
-                result = userRepository.findByRoleAndUsernameContainingIgnoreCase(userRole, search, pr);
-            } else {
-                result = userRepository.findByRole(userRole, pr);
-            }
-        } else if (search != null && !search.isBlank()) {
-            result = userRepository.findByUsernameContainingIgnoreCase(search, pr);
-        } else {
-            result = userRepository.findAll(pr);
-        }
+    public PagedResponse<UserDto> getUsers(String role, String search, Pageable pageable) {
+        UserRole userRole = (role != null && !role.isBlank()) ? UserRole.valueOf(role.toUpperCase()) : null;
+        String s = (search != null && !search.isBlank()) ? search.trim() : "";
+
+        Page<User> result = userRepository.searchUsers(userRole, s, pageable);
         List<UserDto> dtos = result.getContent().stream()
                 .map(this::toUserDtoWithSkills)
                 .collect(Collectors.toList());
-        return new king.kong.dto.PagedResponse<>(dtos, page, size,
+        return new PagedResponse<>(dtos, pageable.getPageNumber(), pageable.getPageSize(),
                 result.getTotalElements(), result.getTotalPages());
     }
 
@@ -94,18 +85,20 @@ public class UserService {
                 .orElseThrow(() -> new RuntimeException("User not found: " + userId));
         userSkillRepository.deleteByIdUserId(userId);
         userSkillRepository.flush();
-        for (SkillUpdateRequest req : skillRequests) {
-            Skill skill = skillRepository.findById(req.getSkillId())
-                    .orElseThrow(() -> new RuntimeException("Skill not found: " + req.getSkillId()));
-            UserSkillId skillId = new UserSkillId();
-            skillId.setUserId(userId);
-            skillId.setSkillId(req.getSkillId());
-            UserSkill userSkill = new UserSkill();
-            userSkill.setId(skillId);
-            userSkill.setUser(user);
-            userSkill.setSkill(skill);
-            userSkill.setProficiencyLevel(req.getProficiencyLevel());
-            userSkillRepository.save(userSkill);
+        if (skillRequests != null) {
+            for (SkillUpdateRequest req : skillRequests) {
+                Skill skill = skillRepository.findById(req.getSkillId())
+                        .orElseThrow(() -> new RuntimeException("Skill not found: " + req.getSkillId()));
+                UserSkillId skillId = new UserSkillId();
+                skillId.setUserId(userId);
+                skillId.setSkillId(req.getSkillId());
+                UserSkill userSkill = new UserSkill();
+                userSkill.setId(skillId);
+                userSkill.setUser(user);
+                userSkill.setSkill(skill);
+                userSkill.setProficiencyLevel(req.getProficiencyLevel());
+                userSkillRepository.save(userSkill);
+            }
         }
         return toUserDtoWithSkills(user);
     }
@@ -158,4 +151,3 @@ public class UserService {
         }
     }
 }
-

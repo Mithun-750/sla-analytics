@@ -103,17 +103,24 @@ export interface TicketEscalation {
 export interface TicketPause {
   id: number;
   ticketId: number;
-  reason: string;
+  ticketNumber?: string;
+  reason?: string;
+  attemptedReason?: string;
   decisionStatus: PauseDecisionStatus;
-  requestedById: number;
-  requestedByUsername: string | null;
+  requestedById?: number;
+  requestedByUsername?: string | null;
+  initiatedById?: number;
+  initiatedByUsername?: string | null;
   approvedById: number | null;
   approvedByUsername: string | null;
+  remarks?: string | null;
   requestedAt: string;
-  approvedAt: string | null;
-  resumedAt: string | null;
-  pauseStartedAt: string | null;
-  pauseEndedAt: string | null;
+  approvedAt?: string | null;
+  pausedAt?: string | null;
+  resumedAt?: string | null;
+  pauseStartedAt?: string | null;
+  pauseEndedAt?: string | null;
+  pausedDurationBusinessSeconds?: number | null;
 }
 
 export interface TicketAssignment {

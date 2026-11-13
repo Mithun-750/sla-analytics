@@ -4,6 +4,7 @@ import king.kong.dto.CustomerDto;
 import king.kong.dto.UserDto;
 import king.kong.service.CustomerService;
 import king.kong.service.UserService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -27,16 +28,26 @@ public class AuthController {
         String type = request.getType();
         Integer id = request.getId();
 
+        if (type == null || id == null) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
+
         LoginResponse response = new LoginResponse();
         response.setType(type);
         response.setId(id);
 
         if ("customer".equalsIgnoreCase(type)) {
             CustomerDto customer = customerService.getById(id);
+            if (customer == null) {
+                return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            }
             response.setUsername(customer.getName());
             response.setUser(customer);
         } else {
             UserDto user = userService.getUserById(id);
+            if (user == null) {
+                return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            }
             response.setUsername(user.getUsername());
             response.setRole(user.getRole());
             response.setUser(user);
@@ -114,4 +125,3 @@ public class AuthController {
         }
     }
 }
-

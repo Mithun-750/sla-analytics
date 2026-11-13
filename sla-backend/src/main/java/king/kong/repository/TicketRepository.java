@@ -11,21 +11,20 @@ import org.springframework.data.repository.query.Param;
 
 public interface TicketRepository extends JpaRepository<Ticket, Integer> {
 
-    Page<Ticket> findByCustomerId(Integer customerId, Pageable pageable);
-
-    Page<Ticket> findByAssignedAgentId(Integer agentId, Pageable pageable);
-
-    Page<Ticket> findByStatus(TicketStatus status, Pageable pageable);
-
-    Page<Ticket> findByStatusAndCustomerId(TicketStatus status, Integer customerId, Pageable pageable);
-
-    Page<Ticket> findByStatusAndAssignedAgentId(TicketStatus status, Integer agentId, Pageable pageable);
-
-    Page<Ticket> findByStatusAndPriority(TicketStatus status, TicketPriority priority, Pageable pageable);
-
-    Page<Ticket> findByCustomerIdAndAssignedAgentId(Integer customerId, Integer agentId, Pageable pageable);
-
-    Page<Ticket> findByPriority(TicketPriority priority, Pageable pageable);
+    @Query("SELECT t FROM Ticket t WHERE (:status IS NULL OR t.status = :status) "
+            + "AND (:customerId IS NULL OR t.customer.id = :customerId) "
+            + "AND (:agentId IS NULL OR t.assignedAgent.id = :agentId) "
+            + "AND (:priority IS NULL OR t.priority = :priority) "
+            + "AND (:search = '' OR LOWER(t.subject) LIKE LOWER(CONCAT('%', :search, '%')) "
+            + "OR LOWER(t.ticketNumber) LIKE LOWER(CONCAT('%', :search, '%')) "
+            + "OR LOWER(t.description) LIKE LOWER(CONCAT('%', :search, '%')))")
+    Page<Ticket> searchTickets(
+            @Param("status") TicketStatus status,
+            @Param("customerId") Integer customerId,
+            @Param("agentId") Integer agentId,
+            @Param("priority") TicketPriority priority,
+            @Param("search") String search,
+            Pageable pageable);
 
     @Query("SELECT COUNT(t) FROM Ticket t WHERE t.assignedAgent.id = :agentId")
     long countByAssignedAgentId(@Param("agentId") Integer agentId);

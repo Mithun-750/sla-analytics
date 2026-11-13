@@ -29,7 +29,10 @@ public class SkillController {
 
     @PostMapping
     public ResponseEntity<SkillDto> create(@RequestBody CreateSkillRequest request) {
-        SkillDto created = skillService.create(request.getName());
+        if (request.getName() == null || request.getName().trim().isEmpty()) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
+        SkillDto created = skillService.create(request.getName().trim());
         return new ResponseEntity<>(created, HttpStatus.CREATED);
     }
 
@@ -45,4 +48,3 @@ public class SkillController {
         }
     }
 }
-

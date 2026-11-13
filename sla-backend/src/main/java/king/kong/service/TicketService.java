@@ -3,8 +3,8 @@ package king.kong.service;
 import king.kong.dto.PagedResponse;
 import king.kong.dto.TicketAssignmentDto;
 import king.kong.dto.TicketDetailDto;
-import king.kong.dto.TicketEventDto;
 import king.kong.dto.TicketEscalationDto;
+import king.kong.dto.TicketEventDto;
 import king.kong.dto.TicketPauseDto;
 import king.kong.dto.TicketSummaryDto;
 import king.kong.model.Customer;
@@ -16,6 +16,7 @@ import king.kong.model.TicketEvent;
 import king.kong.model.TicketPause;
 import king.kong.model.TicketPriority;
 import king.kong.model.TicketStatus;
+import king.kong.model.Urgency;
 import king.kong.model.User;
 import king.kong.repository.CustomerRepository;
 import king.kong.repository.SkillRepository;
@@ -26,7 +27,7 @@ import king.kong.repository.TicketPauseRepository;
 import king.kong.repository.TicketRepository;
 import king.kong.repository.UserRepository;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -65,107 +66,100 @@ public class TicketService {
     }
 
     @Transactional(readOnly = true)
-    public PagedResponse<TicketSummaryDto> getTickets(String status, Integer customerId,
+    public PagedResponse<TicketSummaryDto> getTickets(String search, String status, Integer customerId,
                                                        Integer agentId, String priority,
-                                                       int page, int size) {
-        PageRequest pr = PageRequest.of(page, size);
-        Page<Ticket> result;
-
-        TicketStatus ts = status != null && !status.isBlank()
+                                                       Pageable pageable) {
+        TicketStatus ts = (status != null && !status.isBlank())
                 ? TicketStatus.valueOf(status.toUpperCase()) : null;
-        TicketPriority tp = priority != null && !priority.isBlank()
+        TicketPriority tp = (priority != null && !priority.isBlank())
                 ? TicketPriority.valueOf(priority.toUpperCase()) : null;
+        String s = (search != null && !search.isBlank()) ? search.trim() : "";
 
-        if (ts != null && customerId != null) {
-            result = ticketRepository.findByStatusAndCustomerId(ts, customerId, pr);
-        } else if (ts != null && agentId != null) {
-            result = ticketRepository.findByStatusAndAssignedAgentId(ts, agentId, pr);
-        } else if (ts != null && tp != null) {
-            result = ticketRepository.findByStatusAndPriority(ts, tp, pr);
-        } else if (ts != null) {
-            result = ticketRepository.findByStatus(ts, pr);
-        } else if (customerId != null && agentId != null) {
-            result = ticketRepository.findByCustomerIdAndAssignedAgentId(customerId, agentId, pr);
-        } else if (customerId != null) {
-            result = ticketRepository.findByCustomerId(customerId, pr);
-        } else if (agentId != null) {
-            result = ticketRepository.findByAssignedAgentId(agentId, pr);
-        } else if (tp != null) {
-            result = ticketRepository.findByPriority(tp, pr);
-        } else {
-            result = ticketRepository.findAll(pr);
-        }
+        Page<Ticket> result = ticketRepository.searchTickets(ts, customerId, agentId, tp, s, pageable);
 
         List<TicketSummaryDto> dtos = result.getContent().stream()
                 .map(this::toSummaryDto).collect(Collectors.toList());
-        return new PagedResponse<>(dtos, page, size, result.getTotalElements(), result.getTotalPages());
+        return new PagedResponse<>(dtos, pageable.getPageNumber(), pageable.getPageSize(),
+                result.getTotalElements(), result.getTotalPages());
     }
 
     @Transactional(readOnly = true)
     public TicketDetailDto getById(Integer id) {
-        Ticket ticket = ticketRepository.findById(id)
+        Ticket t = ticketRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Ticket not found: " + id));
-        return toDetailDto(ticket);
+        return toDetailDto(t);
     }
 
     @Transactional
     public TicketSummaryDto createTicket(Integer customerId, String subject, String description,
-                                          String urgency, String priority, Integer requiredSkillId) {
+                                         String urgency, String priority, Integer skillId) {
         Customer customer = customerRepository.findById(customerId)
                 .orElseThrow(() -> new RuntimeException("Customer not found: " + customerId));
+
         Ticket ticket = new Ticket();
         ticket.setTicketNumber("TKT-" + System.currentTimeMillis());
         ticket.setCustomer(customer);
         ticket.setSubject(subject);
         ticket.setDescription(description);
-        if (urgency != null) {
-            ticket.setUrgency(king.kong.model.Urgency.valueOf(urgency.toUpperCase()));
+        ticket.setStatus(TicketStatus.OPEN);
+        if (urgency != null && !urgency.isBlank()) {
+            ticket.setUrgency(Urgency.valueOf(urgency.toUpperCase()));
         }
-        if (priority != null) {
+        if (priority != null && !priority.isBlank()) {
             ticket.setPriority(TicketPriority.valueOf(priority.toUpperCase()));
+        } else {
+            ticket.setPriority(TicketPriority.MEDIUM);
         }
-        if (requiredSkillId != null) {
-            Skill skill = skillRepository.findById(requiredSkillId)
-                    .orElseThrow(() -> new RuntimeException("Skill not found: " + requiredSkillId));
+        if (skillId != null) {
+            Skill skill = skillRepository.findById(skillId)
+                    .orElseThrow(() -> new RuntimeException("Skill not found: " + skillId));
             ticket.setRequiredSkill(skill);
         }
-        ticket.setStatus(TicketStatus.OPEN);
-        ticket.setCreatedAt(Instant.now());
-        ticket.setUpdatedAt(Instant.now());
-        return toSummaryDto(ticketRepository.save(ticket));
+
+        Ticket saved = ticketRepository.save(ticket);
+        logEvent(saved, null, "SYSTEM", "TICKET_CREATED", null, "OPEN");
+        return toSummaryDto(saved);
     }
 
     @Transactional
-    public TicketSummaryDto updateStatus(Integer id, String status) {
-        Ticket ticket = ticketRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Ticket not found: " + id));
-        ticket.setStatus(TicketStatus.valueOf(status.toUpperCase()));
-        ticket.setUpdatedAt(Instant.now());
-        return toSummaryDto(ticketRepository.save(ticket));
+    public TicketSummaryDto updateStatus(Integer ticketId, String newStatus) {
+        Ticket ticket = ticketRepository.findById(ticketId)
+                .orElseThrow(() -> new RuntimeException("Ticket not found: " + ticketId));
+        String fromStatus = ticket.getStatus() != null ? ticket.getStatus().name() : null;
+        ticket.setStatus(TicketStatus.valueOf(newStatus.toUpperCase()));
+        if (ticket.getStatus() == TicketStatus.RESOLVED && ticket.getResolvedAt() == null) {
+            ticket.setResolvedAt(Instant.now());
+        }
+        Ticket saved = ticketRepository.save(ticket);
+        logEvent(saved, null, "USER", "STATUS_CHANGED", fromStatus, newStatus);
+        return toSummaryDto(saved);
     }
 
     @Transactional
-    public TicketSummaryDto assignTicket(Integer id, Integer agentId, Integer assignedById) {
-        Ticket ticket = ticketRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Ticket not found: " + id));
+    public TicketSummaryDto assignTicket(Integer ticketId, Integer agentId, Integer assignedById) {
+        Ticket ticket = ticketRepository.findById(ticketId)
+                .orElseThrow(() -> new RuntimeException("Ticket not found: " + ticketId));
         User agent = userRepository.findById(agentId)
                 .orElseThrow(() -> new RuntimeException("Agent not found: " + agentId));
-        User assignedBy = assignedById != null
-                ? userRepository.findById(assignedById).orElse(agent)
-                : agent;
+        User assignedBy = userRepository.findById(assignedById)
+                .orElseThrow(() -> new RuntimeException("AssignedBy user not found: " + assignedById));
+
         ticket.setAssignedAgent(agent);
-        ticket.setUpdatedAt(Instant.now());
-        ticketRepository.save(ticket);
+        if (ticket.getFirstAssignedAt() == null) {
+            ticket.setFirstAssignedAt(Instant.now());
+        }
+        ticket.setReassignmentCount(ticket.getReassignmentCount() + 1);
+        Ticket saved = ticketRepository.save(ticket);
 
         TicketAssignment assignment = new TicketAssignment();
-        assignment.setTicket(ticket);
+        assignment.setTicket(saved);
         assignment.setAgent(agent);
         assignment.setAssignedBy(assignedBy);
         assignment.setAssignmentType("MANUAL");
-        assignment.setAssignedAt(java.time.LocalDateTime.now());
         ticketAssignmentRepository.save(assignment);
 
-        return toSummaryDto(ticket);
+        logEvent(saved, assignedBy, "USER", "TICKET_ASSIGNED", null, agent.getUsername());
+        return toSummaryDto(saved);
     }
 
     @Transactional(readOnly = true)
@@ -192,6 +186,20 @@ public class TicketService {
                 .map(this::toEscalationDto).collect(Collectors.toList());
     }
 
+    private void logEvent(Ticket ticket, User actor, String actorType, String eventType,
+                          String fromState, String toState) {
+        TicketEvent event = new TicketEvent();
+        event.setTicket(ticket);
+        event.setActor(actor);
+        event.setActorType(actorType);
+        event.setEventType(eventType);
+        event.setEventVersion(1);
+        event.setFromState(fromState);
+        event.setToState(toState);
+        event.setSlaConsumedSecondsSnapshot(ticket.getSlaConsumedSeconds());
+        ticketEventRepository.save(event);
+    }
+
     private TicketSummaryDto toSummaryDto(Ticket t) {
         TicketSummaryDto dto = new TicketSummaryDto();
         dto.setId(t.getId());
@@ -202,7 +210,7 @@ public class TicketService {
         dto.setUrgency(t.getUrgency() != null ? t.getUrgency().name() : null);
         dto.setSlaClockStatus(t.getSlaClockStatus() != null ? t.getSlaClockStatus().name() : null);
         dto.setSlaConsumedSeconds(t.getSlaConsumedSeconds());
-        dto.setSlaTargetSeconds(t.getSlaTargetSeconds());
+        dto.setSlaTargetSeconds(t.getSlaTargetSeconds() != null ? t.getSlaTargetSeconds() : 0);
         dto.setSlaDeadlineAt(t.getSlaDeadlineAt());
         dto.setSlaBreached(t.isSlaBreached());
         dto.setRiskLevel(t.getRiskLevel() != null ? t.getRiskLevel().name() : null);
@@ -228,23 +236,12 @@ public class TicketService {
         dto.setStatus(t.getStatus() != null ? t.getStatus().name() : null);
         dto.setPriority(t.getPriority() != null ? t.getPriority().name() : null);
         dto.setUrgency(t.getUrgency() != null ? t.getUrgency().name() : null);
-        dto.setPriorityOverridden(t.isPriorityOverridden());
-        dto.setSlaPolicyKey(t.getSlaPolicyKey());
-        dto.setSlaPolicyVersion(t.getSlaPolicyVersion());
-        dto.setCalendarConfigVersion(t.getCalendarConfigVersion());
         dto.setSlaClockStatus(t.getSlaClockStatus() != null ? t.getSlaClockStatus().name() : null);
         dto.setSlaConsumedSeconds(t.getSlaConsumedSeconds());
-        dto.setSlaTargetSeconds(t.getSlaTargetSeconds());
-        dto.setSlaEscalationThresholdPct(t.getSlaEscalationThresholdPct());
-        dto.setSlaLastStartedAt(t.getSlaLastStartedAt());
+        dto.setSlaTargetSeconds(t.getSlaTargetSeconds() != null ? t.getSlaTargetSeconds() : 0);
         dto.setSlaDeadlineAt(t.getSlaDeadlineAt());
         dto.setSlaBreached(t.isSlaBreached());
-        dto.setRiskScore(t.getRiskScore());
         dto.setRiskLevel(t.getRiskLevel() != null ? t.getRiskLevel().name() : null);
-        dto.setReopenedCount(t.getReopenedCount());
-        dto.setReassignmentCount(t.getReassignmentCount());
-        dto.setFirstAssignedAt(t.getFirstAssignedAt());
-        dto.setResolvedAt(t.getResolvedAt());
         dto.setCreatedAt(t.getCreatedAt());
         dto.setUpdatedAt(t.getUpdatedAt());
         if (t.getCustomer() != null) {
@@ -255,19 +252,9 @@ public class TicketService {
             dto.setAssignedAgentId(t.getAssignedAgent().getId());
             dto.setAssignedAgentUsername(t.getAssignedAgent().getUsername());
         }
-        if (t.getRequiredSkill() != null) {
-            dto.setRequiredSkillId(t.getRequiredSkill().getId());
-            dto.setRequiredSkillName(t.getRequiredSkill().getName());
-        }
-        List<TicketEventDto> events = ticketEventRepository
-                .findByTicketIdOrderByCreatedAtAsc(t.getId()).stream()
-                .map(this::toEventDto).collect(Collectors.toList());
-        dto.setRecentEvents(events);
 
-        List<TicketAssignmentDto> assignments = ticketAssignmentRepository
-                .findByTicketId(t.getId()).stream()
-                .map(this::toAssignmentDto).collect(Collectors.toList());
-        dto.setAssignments(assignments);
+        List<TicketEvent> events = ticketEventRepository.findByTicketIdOrderByCreatedAtAsc(t.getId());
+        dto.setEvents(events.stream().map(this::toEventDto).collect(Collectors.toList()));
 
         List<TicketPause> pauses = ticketPauseRepository.findByTicketId(t.getId());
         pauses.stream()

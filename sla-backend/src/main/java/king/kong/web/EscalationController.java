@@ -3,6 +3,9 @@ package king.kong.web;
 import king.kong.dto.PagedResponse;
 import king.kong.dto.TicketEscalationDto;
 import king.kong.service.EscalationService;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,28 +31,39 @@ public class EscalationController {
 
     @GetMapping
     public ResponseEntity<PagedResponse<TicketEscalationDto>> getEscalations(
+            @RequestParam(required = false) String search,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) Integer supervisorId,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(escalationService.list(status, supervisorId, page, size));
+            @PageableDefault(page = 0, size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
+            Pageable pageable) {
+        return ResponseEntity.ok(escalationService.list(search, status, supervisorId, pageable));
     }
 
     @PostMapping("/tickets/{ticketId}/escalations")
     public ResponseEntity<TicketEscalationDto> createForTicket(
             @PathVariable Integer ticketId,
             @RequestBody CreateEscalationRequest request) {
+        if (request.getReason() == null || request.getReason().trim().isEmpty()) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
+        Integer createdById = request.getCreatedById() != null ? request.getCreatedById() : 1;
         TicketEscalationDto created = escalationService.create(
-                ticketId, request.getCreatedById(), request.getReason(), request.getDescription());
+                ticketId, createdById, request.getReason().trim(), request.getDescription());
         return new ResponseEntity<>(created, HttpStatus.CREATED);
     }
 
     @PostMapping
     public ResponseEntity<TicketEscalationDto> create(
             @RequestBody CreateEscalationRequest request) {
+        if (request.getTicketId() == null) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
+        if (request.getReason() == null || request.getReason().trim().isEmpty()) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
         Integer createdById = request.getCreatedById() != null ? request.getCreatedById() : 1;
         TicketEscalationDto created = escalationService.create(
-                request.getTicketId(), createdById, request.getReason(), request.getDescription());
+                request.getTicketId(), createdById, request.getReason().trim(), request.getDescription());
         return new ResponseEntity<>(created, HttpStatus.CREATED);
     }
 
@@ -58,6 +72,9 @@ public class EscalationController {
             @PathVariable Integer id,
             @RequestBody Map<String, Integer> body) {
         Integer supervisorId = body.get("supervisorId");
+        if (supervisorId == null) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
         return ResponseEntity.ok(escalationService.claim(id, supervisorId));
     }
 
@@ -66,6 +83,9 @@ public class EscalationController {
             @PathVariable Integer id,
             @RequestBody Map<String, Integer> body) {
         Integer supervisorId = body.get("supervisorId");
+        if (supervisorId == null) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
         return ResponseEntity.ok(escalationService.claim(id, supervisorId));
     }
 
@@ -73,16 +93,20 @@ public class EscalationController {
     public ResponseEntity<TicketEscalationDto> patchResolve(
             @PathVariable Integer id,
             @RequestBody Map<String, String> body) {
-        String notes = body.getOrDefault("resolutionNotes", body.get("resolutionNote"));
-        return ResponseEntity.ok(escalationService.resolve(id, notes));
+        String resolutionNotes = body.get("resolutionNotes") != null
+                ? body.get("resolutionNotes")
+                : body.get("resolutionNote");
+        return ResponseEntity.ok(escalationService.resolve(id, resolutionNotes));
     }
 
     @PostMapping("/{id}/resolve")
     public ResponseEntity<TicketEscalationDto> postResolve(
             @PathVariable Integer id,
             @RequestBody Map<String, String> body) {
-        String notes = body.getOrDefault("resolutionNotes", body.get("resolutionNote"));
-        return ResponseEntity.ok(escalationService.resolve(id, notes));
+        String resolutionNotes = body.get("resolutionNotes") != null
+                ? body.get("resolutionNotes")
+                : body.get("resolutionNote");
+        return ResponseEntity.ok(escalationService.resolve(id, resolutionNotes));
     }
 
     public static class CreateEscalationRequest {
@@ -124,4 +148,3 @@ public class EscalationController {
         }
     }
 }
-

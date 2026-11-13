@@ -51,6 +51,7 @@ __pycache__/
 
 # Node dependencies and package-manager state
 node_modules/
+node_modules/*
 
 # Operating system files
 .DS_Store

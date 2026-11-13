@@ -3,6 +3,9 @@ package king.kong.web;
 import king.kong.dto.CustomerDto;
 import king.kong.dto.PagedResponse;
 import king.kong.service.CustomerService;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,9 +29,9 @@ public class CustomerController {
     @GetMapping
     public ResponseEntity<PagedResponse<CustomerDto>> getCustomers(
             @RequestParam(required = false) String search,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(customerService.getCustomers(search, page, size));
+            @PageableDefault(page = 0, size = 20, sort = "name", direction = Sort.Direction.ASC)
+            Pageable pageable) {
+        return ResponseEntity.ok(customerService.getCustomers(search, pageable));
     }
 
     @GetMapping("/{id}")
@@ -38,8 +41,18 @@ public class CustomerController {
 
     @PostMapping
     public ResponseEntity<CustomerDto> createCustomer(@RequestBody CreateCustomerRequest request) {
+        if (request.getName() == null || request.getName().trim().isEmpty()) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
+        if (request.getEmail() == null || request.getEmail().trim().isEmpty()) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
+        if (request.getTier() == null || request.getTier().trim().isEmpty()) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
+
         CustomerDto created = customerService.createCustomer(
-                request.getName(), request.getEmail(), request.getTier());
+                request.getName().trim(), request.getEmail().trim(), request.getTier().trim());
         return new ResponseEntity<>(created, HttpStatus.CREATED);
     }
 
@@ -73,4 +86,3 @@ public class CustomerController {
         }
     }
 }
-
