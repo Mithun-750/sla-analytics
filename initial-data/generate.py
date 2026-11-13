@@ -14,7 +14,7 @@ from typing import Iterable
 SEED = 750
 START = datetime(2026, 1, 5, 8, 0, tzinfo=timezone.utc)
 ISO = "%Y-%m-%dT%H:%M:%SZ"
-DEFAULT_TICKET_COUNT = 5000
+DEFAULT_TICKET_COUNT = 100
 
 PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"]
 URGENCIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]

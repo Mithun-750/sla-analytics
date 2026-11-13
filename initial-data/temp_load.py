@@ -32,7 +32,7 @@ def main() -> None:
             "--user-count", "6",
             "--customer-count", "3",
             "--skill-count", "3",
-            "--ticket-count", "30",
+            "--ticket-count", "50",
             "--id-offset", str(id_offset),
             "--batch", str(state["next_batch"]),
         ],
