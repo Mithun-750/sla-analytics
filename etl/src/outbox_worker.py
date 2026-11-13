@@ -17,17 +17,25 @@ AWS_PROFILE = os.getenv("AWS_PROFILE", "s3-user")
 AWS_REGION = os.getenv("AWS_REGION", "ap-southeast-2")
 S3_BUCKET = os.getenv("S3_BUCKET", "mithun-750-sla")
 
-BATCH_SIZE = int(os.getenv("BATCH_SIZE", "50"))
-LOCK_DURATION_SECONDS = int(os.getenv("LOCK_DURATION_SECONDS", "300"))
-POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "5"))
+BATCH_SIZE = int(os.getenv("OUTBOX_BATCH_SIZE", os.getenv("BATCH_SIZE", "100")))
+LOCK_DURATION_SECONDS = int(os.getenv("OUTBOX_CLAIM_TIMEOUT_SECONDS", os.getenv("LOCK_DURATION_SECONDS", "300")))
+POLL_INTERVAL_SECONDS = int(os.getenv("OUTBOX_POLL_INTERVAL_SECONDS", os.getenv("POLL_INTERVAL_SECONDS", "5")))
 
-DATABASE_URL = os.environ["DATABASE_URL"]
+DATABASE_URL = os.getenv("SOURCE_DB_URL") or os.getenv("DATABASE_URL") or "postgresql://localhost:5432/sla"
+DATABASE_USERNAME = os.getenv("SOURCE_DB_USERNAME")
+DATABASE_PASSWORD = os.getenv("SOURCE_DB_PASSWORD")
 
 
 def create_connections():
+    conn_kwargs = {"row_factory": dict_row}
+    if DATABASE_USERNAME:
+        conn_kwargs["user"] = DATABASE_USERNAME
+    if DATABASE_PASSWORD:
+        conn_kwargs["password"] = DATABASE_PASSWORD
+
     connection = psycopg.connect(
         DATABASE_URL,
-        row_factory=dict_row
+        **conn_kwargs
     )
 
     session = boto3.Session(

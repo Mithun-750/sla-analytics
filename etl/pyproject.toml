@@ -22,7 +22,7 @@ sla-outbox-worker = "outbox_worker:run"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-py-modules = ["sync"]
+py-modules = ["sync", "outbox_worker"]
 
 [build-system]
 requires = ["setuptools>=80"]
