@@ -21,8 +21,9 @@ pnpm db:up
 pnpm data:load
 ```
 
-The Python loader creates the schema and loads the generated data before the
-application starts. For Docker Compose, data initialization is opt-in; see
+`pnpm db:up` starts PostgreSQL only for local development. The Python loader
+creates the schema and loads the generated data. For the complete Docker
+workflow, data initialization is opt-in; see
 [Docker startup](#docker-startup).
 
 ## Outbox
@@ -52,16 +53,19 @@ automatically by `pnpm start`.
 ## Commands
 
 ```bash
-pnpm app:run        # Start the application
+pnpm app:run        # Start backend, worker, and Vite frontend locally
 pnpm data:generate  # Generate CSV data
-pnpm data:load      # Generate and load data with Python
-pnpm data:load-temp # Generate and load a fresh smaller batch
+pnpm data:load      # Start PostgreSQL, then generate and load data locally
+pnpm data:load-temp # Start PostgreSQL, then load a smaller batch locally
 pnpm data:drop      # Remove rows and keep the schema
-pnpm db:reset       # Delete and recreate PostgreSQL
+pnpm db:reset       # Recreate PostgreSQL and run the init profile
 pnpm db:schema      # Create or validate the application schema
 pnpm db:outbox      # Install or refresh PostgreSQL outbox triggers
 pnpm db:outbox:backfill # Queue existing rows for one-time publication
-pnpm start          # Start the backend and outbox worker together
+pnpm start          # Start backend, worker, and Vite frontend locally
+pnpm docker:init    # Run the Compose seed initializer explicitly
+pnpm docker:up      # Start the complete containerized application
+pnpm docker:down    # Stop and remove application containers
 pnpm test           # Run tests
 pnpm build          # Build the application
 pnpm etl:sync       # Install ETL dependencies
@@ -92,15 +96,15 @@ reconciliation.
 The default Compose startup does not run the seed initializer:
 
 ```bash
-docker compose up -d
+pnpm docker:up
 ```
 
 For a new database, initialize the schema and seed data explicitly before
 starting the application services:
 
 ```bash
-docker compose --profile init run --rm data-init
-docker compose up -d
+pnpm docker:init
+pnpm docker:up
 ```
 
 The initializer is safe to run against an existing database, but it is
@@ -109,11 +113,17 @@ intentionally opt-in so normal restarts do not regenerate or reload seed data.
 For an already initialized database, start the application directly:
 
 ```bash
-docker compose up -d
+pnpm docker:up
 ```
 
 To check the service state:
 
 ```bash
 docker compose ps
+```
+
+The equivalent pnpm command is:
+
+```bash
+pnpm docker:up
 ```
