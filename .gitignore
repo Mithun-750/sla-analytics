@@ -19,10 +19,6 @@ target/
 # VS Code workspace state
 .vscode
 .vscode/*
-!.vscode/settings.json
-!.vscode/extensions.json
-!.vscode/launch.json
-!.vscode/tasks.json
 
 # Logs and runtime files
 *.log
