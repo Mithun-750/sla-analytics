@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = ROOT / "scripts" / "schema.sql"
+OUTBOX_SCHEMA = ROOT / "etl" / "sql" / "outbox.sql"
 IDENTITY_TABLES = (
     "users",
     "customers",
@@ -133,6 +134,7 @@ def load(directory: Path) -> None:
     with connection() as conn:
         with conn.cursor() as cursor:
             cursor.execute(SCHEMA.read_text(encoding="utf-8"))
+            cursor.execute(OUTBOX_SCHEMA.read_text(encoding="utf-8"))
             load_users(cursor, directory)
             load_simple(cursor, directory, "customers",
                         ("id", "name", "email", "tier", "created_at"))

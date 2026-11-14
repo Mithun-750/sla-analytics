@@ -39,7 +39,6 @@ DATABASE_URL = os.getenv(
 DATABASE_USERNAME = os.getenv("SOURCE_DB_USERNAME", "postgres")
 DATABASE_PASSWORD = os.getenv("SOURCE_DB_PASSWORD", "postgres")
 
-AWS_PROFILE = os.getenv("AWS_PROFILE", "s3-user")
 AWS_REGION = os.getenv("AWS_REGION", "ap-southeast-2")
 S3_BUCKET = os.getenv("S3_BUCKET", "mithun-sla-data")
 
@@ -55,10 +54,7 @@ def create_connections():
         row_factory=dict_row,
     )
 
-    session = boto3.Session(
-        profile_name=AWS_PROFILE,
-        region_name=AWS_REGION,
-    )
+    session = boto3.Session(region_name=AWS_REGION)
 
     return connection, session.client("s3")
 

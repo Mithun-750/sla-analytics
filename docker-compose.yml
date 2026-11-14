@@ -17,5 +17,57 @@ services:
       timeout: 5s
       retries: 10
 
+  data-init:
+    profiles: ["init"]
+    build:
+      context: .
+      dockerfile: initial-data/Dockerfile
+    environment:
+      SOURCE_DB_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/sla
+      SOURCE_DB_USERNAME: ${POSTGRES_USER:-postgres}
+      SOURCE_DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: ./sla-backend
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/sla
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+
+  worker:
+    build:
+      context: ./etl
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SOURCE_DB_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/sla
+      SOURCE_DB_USERNAME: ${POSTGRES_USER:-postgres}
+      SOURCE_DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: sla-frontend/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api}
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+
 volumes:
   sla-postgres-data:

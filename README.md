@@ -6,13 +6,24 @@ Spring Boot SLA application with PostgreSQL and deterministic seed data.
 
 Requirements: Docker, pnpm, Maven, and uv.
 
+For local configuration, copy the example environment file and replace the
+placeholder values:
+
+```bash
+cp .env.example .env
+```
+
+Keep `.env` private. It contains database and AWS configuration. Do not commit
+it or put real credentials in `.env.example`.
+
 ```bash
 pnpm db:up
 pnpm data:load
 ```
 
 The Python loader creates the schema and loads the generated data before the
-application starts.
+application starts. For Docker Compose, data initialization is opt-in; see
+[Docker startup](#docker-startup).
 
 ## Outbox
 
@@ -58,7 +69,12 @@ pnpm etl:run        # Run the legacy full-table export
 ```
 
 The outbox worker publishes to S3. Configure the database, AWS, and worker
-settings in the root `.env` file. It writes one deterministic object per
+settings in the root `.env` file. It uses boto3's standard environment
+credential chain; an AWS CLI profile and a `~/.aws` mount are not required.
+AWS authentication uses the standard
+environment variables `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`
+(optionally `AWS_SESSION_TOKEN` for temporary credentials). It writes one
+deterministic object per
 outbox event, so retrying an event overwrites the same object instead of
 creating a duplicate. Successful uploads are logged every 100 events by
 default; set `OUTBOX_LOG_INTERVAL` to change that interval. The worker uploads batch objects sequentially. Events are written as JSON arrays,
@@ -70,3 +86,34 @@ uploaded object. Individual failed batches are always logged.
 The outbox worker writes each incremental change under `events/`, `raw/`,
 `clean/`, and `rejected/`. Run `pnpm etl:run` for full-table snapshots and
 reconciliation.
+
+### Docker startup
+
+The default Compose startup does not run the seed initializer:
+
+```bash
+docker compose up -d
+```
+
+For a new database, initialize the schema and seed data explicitly before
+starting the application services:
+
+```bash
+docker compose --profile init run --rm data-init
+docker compose up -d
+```
+
+The initializer is safe to run against an existing database, but it is
+intentionally opt-in so normal restarts do not regenerate or reload seed data.
+
+For an already initialized database, start the application directly:
+
+```bash
+docker compose up -d
+```
+
+To check the service state:
+
+```bash
+docker compose ps
+```

@@ -12,7 +12,6 @@ from psycopg.rows import dict_row
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
-AWS_PROFILE = os.getenv("AWS_PROFILE", "s3-user")
 AWS_REGION = os.getenv("AWS_REGION", "ap-southeast-2")
 S3_BUCKET = os.getenv("S3_BUCKET", "mithun-750-sla")
 
@@ -39,10 +38,7 @@ def create_connections():
         **conn_kwargs
     )
 
-    session = boto3.Session(
-        profile_name=AWS_PROFILE,
-        region_name=AWS_REGION
-    )
+    session = boto3.Session(region_name=AWS_REGION)
 
     s3 = session.client("s3")
 

@@ -1,0 +1,14 @@
+.git
+.github
+.idea
+.vscode
+**/node_modules
+**/.venv
+**/__pycache__
+**/target
+data/generated
+data/temp
+data/temp-state.json
+.env
+.env.*
+!.env.example
